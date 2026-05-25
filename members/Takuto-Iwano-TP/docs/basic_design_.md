@@ -151,7 +151,6 @@
 |  | 表示更新 | `updateDisplay()` | rps値をディスプレイに表示する | なし | なし | loop()内 |
 |  | ブザー制御 |`updateBuzzer()`| 警告中にブザーを鳴らす | なし | なし | loop()内 |
 |  | ポテンショメータ読取 |`readPotentiometer()`| モーター速度を調整 | なし | int値 | loop()内  |
-|  | リセット判定 | `checkReset()` | eset()	PCからのリセット要求を判定し状態を初期化 | なし | なし | loop()内 |
 
 > [!CAUTION]
 > loop() の中で全部書こうとしていませんか？
