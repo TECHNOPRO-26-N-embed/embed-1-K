@@ -166,13 +166,10 @@
 |:--|:--|:--|:--|:--|:--|:--|
 | - | 初期化 | setup() | ピン設定、TM1637初期化、起動時表示初期化 | なし | なし | 起動時1回 |
 | - | （共通）待機・制御 | loop() | 周期管理と状態遷移に応じた関数呼び出し | なし | なし | 常時 |
-| - | （共通）距離読出 | readDistanceMm() | HC-SR04から距離を取得する | なし | int(mm) | loop()内 |
-| - | （共通）距離判定 | classifyDistanceZone() | 距離を近/中/遠に分類する | int distanceMm | uint8_t | loop()内 |
-| - | （共通）出力更新 | updateOutputs() | 状態と距離区分に応じてブザー/表示を更新 | uint8_t state, uint8_t zone | なし | loop()内 |
-| F01 | 距離を周期的に測定 | doMeasureFeature() | 100msごとに距離を計測して保存する | なし | なし | loop()内 |
-| F02 | 3段階に分類 | doClassifyFeature() | しきい値で近中遠の区分を決定する | なし | なし | loop()内 |
-| F03 | 区分別にブザー出力 | doBuzzerFeature() | 区分に応じた周波数/鳴動パターンで通知する | なし | なし | loop()内 |
-| F04 | 距離を数値表示 | doDisplayFeature() | 距離(mm)を4桁表示器に表示する | なし | なし | loop()内 |
+| F01 | 距離を周期的に測定 | readDistanceMm() | HC-SR04から距離を取得し、distanceMmへ保存する | なし | int(mm) | loop()内 |
+| F02 | 3段階に分類 | classifyDistanceZone() | 距離(mm)をしきい値で近/中/遠に分類する | int distanceMm | uint8_t zone | loop()内 |
+| F03 | 区分別にブザー出力 | updateBuzzerOutput() | zoneに応じて周波数/鳴動パターンを出力する | uint8_t zone | なし | loop()内 |
+| F04 | 距離を数値表示 | updateDisplayOutput() | 距離(mm)を4桁表示器に反映する | int distanceMm | なし | loop()内 |
 | A01 | 距離と音モードをシリアル表示 | doSerialReportOptional() | 距離と現在モードをシリアルへ出力する | なし | なし | loop()内 |
 | A02 | しきい値を定数で調整 | applyThresholdOptional() | しきい値定数を一元管理して反映する | なし | なし | setup()/loop() |
 | A03 | 光の表現追加 | doLedOptional() | 距離区分に応じたLED表示を行う | uint8_t zone | なし | loop()内 |
@@ -252,10 +249,10 @@
 
 | No | 必須機能（requirements_unit1.md 3-1 から転記） | 対応するSW設計（関数名等） | 対応するHW設計（ピン等） | 結合テスト No |
 |:---|:---|:---|:---|:---|
-| 1 | 超音波センサーで距離を周期的に測定できる | 2-2（関数：doMeasureFeature, readDistanceMm） | 3-1（ピン：D9, D10） | テスト#1 |
-| 2 | 測定距離を近・中・遠の3段階に分類できる | 2-2（関数：doClassifyFeature, classifyDistanceZone） | 3-1（ピン：D9, D10） | テスト#2 |
-| 3 | 距離区分ごとに異なる音を出力できる | 2-2（関数：doBuzzerFeature, updateOutputs） | 3-1（ピン：D6） | テスト#3 |
-| 4 | 4桁7セグメントで距離を表示できる | 2-2（関数：doDisplayFeature） | 3-1（ピン：D4, D5） | テスト#4 |
+| 1 | 超音波センサーで距離を周期的に測定できる | 2-2（関数：readDistanceMm） | 3-1（ピン：D9, D10） | テスト#1 |
+| 2 | 測定距離を近・中・遠の3段階に分類できる | 2-2（関数：classifyDistanceZone） | 3-1（ピン：D9, D10） | テスト#2 |
+| 3 | 距離区分ごとに異なる音を出力できる | 2-2（関数：updateBuzzerOutput） | 3-1（ピン：D6） | テスト#3 |
+| 4 | 4桁7セグメントで距離を表示できる | 2-2（関数：updateDisplayOutput） | 3-1（ピン：D4, D5） | テスト#4 |
 
 ---
 
