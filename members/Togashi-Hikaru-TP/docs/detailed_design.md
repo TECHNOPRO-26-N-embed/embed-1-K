@@ -19,10 +19,10 @@
 
 | 項目 | basic_design.md から転記 |
 |:--|:--|
-| 作品タイトル |  |
-| 状態の種類（1-2 状態遷移から） | |
-| 実装する関数の数（2-2 関数一覧から） | 　個 |
-| グローバル変数の合計バイト数（2-1 SRAM確認から） | 　B |
+| 作品タイトル | アナログスティック式電卓 |
+| 状態の種類（1-2 状態遷移から） | 待機中、入力中、計算中、結果表示中、エラー中、リセット中 |
+| 実装する関数の数（2-2 関数一覧から） | 32個 |
+| グローバル変数の合計バイト数（2-1 SRAM確認から） | 65B |
 
 ---
 
@@ -33,24 +33,57 @@
 
 ```
 【ピン定義】（basic_design.md 3-1 から転記）
-  PIN_BUTTON    = 2    // タクトスイッチ（INPUT_PULLUP）
-  PIN_LED_RED   = 9    // 赤LED
-  PIN_LED_GREEN = 10   // 緑LED
-  PIN_BUZZER    = 11   // パッシブブザー
+  PIN_STICK_X   = A0   // アナログスティックX軸
+  PIN_STICK_Y   = A1   // アナログスティックY軸
+  PIN_STICK_SW  = 2    // スティック押込みSW
+  PIN_BTN_OP    = 3    // 演算子切替ボタン
+  PIN_BTN_CONFIRM = 4  // 入力確定ボタン
+  PIN_BTN_CALC  = 5    // 計算実行ボタン
+  PIN_BTN_RESET = 6    // リセットボタン
+  PIN_BTN_CANCEL = 7   // 入力取消ボタン
+  PIN_BUZZER    = 8    // パッシブブザー
 
-【状態管理】（basic_design.md 1-2 の状態名から転記）
-  currentState  : int = 0   // 0:待機 1:動作中 2:完了 3:エラー
+【状態管理】
+  currentState    : uint8_t = 0   // 現在の状態（待機/入力/計算/結果/エラー/リセット）
+  prevState       : uint8_t = 0   // 1つ前の状態
 
-【タイマー（millis()用）】（basic_design.md 2-3 から転記）
-  lastMillis_LED    : unsigned long = 0
-  lastMillis_Sensor : unsigned long = 0
+【計算用データ】
+  operand1        : long = 0      // 第1オペランド
+  operand2        : long = 0      // 第2オペランド
+  calcResult      : long = 0      // 計算結果
+  inputBuffer     : long = 0      // 入力中の数値バッファ
+  inputDigits     : uint8_t = 0   // 入力中の桁数
+  digitRangeMode  : uint8_t = 0   // 数字レンジ（0:0〜4, 1:5〜9）
+  currentOperator : char = '+'    // 現在の演算子
+  hasOperand1     : bool = false  // 第1オペランド確定済みか
+  hasOperand2     : bool = false  // 第2オペランド確定済みか
+  hasResult       : bool = false  // 結果表示中か
+  errorCode       : uint8_t = 0   // エラー種別（0:なし, 1:0除算, 2:スティック異常）
 
-【センサー・入力値】（basic_design.md 2-1 から転記）
-  sensorValue   : int  = 0
-  buttonState   : bool = false
+【アナログスティック・ボタン入力】
+  analogX         : int = 512     // スティックX軸生値
+  analogY         : int = 512     // スティックY軸生値
+  stickPressed    : bool = false  // スティック押込み状態
+  stickDirection  : int8_t = -1   // 方向判定結果
+  btnOpPressed        : bool = false // 演算子切替ボタン
+  btnConfirmPressed   : bool = false // 入力確定ボタン
+  btnCalcPressed      : bool = false // 計算実行ボタン
+  btnResetPressed     : bool = false // リセットボタン
+  btnCancelPressed    : bool = false // 入力取消ボタン
 
-【その他のフラグ・カウンター】
-  （自分のものを追加）
+【タイマー・デバウンス管理】
+  lastDebounceMs[5]   : unsigned long[5] = {0,0,0,0,0} // 各ボタンの最終入力時刻
+  lastInputPollMs     : unsigned long = 0   // 入力読み取りの最終時刻
+  lastBuzzerStartMs   : unsigned long = 0   // ブザー鳴動開始時刻
+  buzzerActive        : bool = false        // ブザー鳴動中フラグ
+
+【定数】
+  DEBOUNCE_MS         : const unsigned long = 50   // デバウンス時間
+  INPUT_POLL_MS       : const unsigned long = 100  // 入力更新周期
+  STICK_DEADZONE      : const int = 80             // スティック中心無効範囲
+  STICK_THRESHOLD     : const int = 220            // 方向判定しきい値
+  BUZZER_FREQ_HZ      : const unsigned int = 2000  // ブザー周波数
+  BUZZER_DURATION_MS  : const unsigned int = 120   // ブザー鳴動時間
 ```
 
 ---
@@ -62,102 +95,296 @@
 
 ---
 
-### `setup()` — 初期化処理
+### `setup()` — ピンモード設定、シリアル通信初期化、初期状態の設定を行う
+
+**basic_design.md 2-2 との対応：** ピンモード設定、シリアル通信初期化、初期状態の設定を行う
+
+**引数：** なし
+
+**戻り値：** なし
 
 ```
 【処理の流れ】
-1. ピンモードを設定する
-   - PIN_BUTTON  → INPUT_PULLUP
-   - PIN_LED_*   → OUTPUT
-   - PIN_BUZZER  → OUTPUT
-
-2. ライブラリの初期化（使うものだけ）
-   - 例: lcd.begin(16, 2)
-   - 例: servo.attach(PIN_SERVO)
-
-3. Serial.begin(9600)（デバッグ用）
-
-4. 起動確認（任意）: 緑LEDを1秒点灯して消灯
-```
-
-**↓ 自分の setup() を設計してください**
-```
-【処理の流れ】
-1.
-2.
-3.
+1. 各ピンのモードを設定（INPUT_PULLUP/OUTPUT）
+2. グローバル変数・状態を初期化
+3. Serial.begin(9600)でシリアル通信開始
+4. 必要なライブラリ初期化（該当あれば）
+5. 起動確認用にブザーを短く鳴らす
 ```
 
 ---
 
-### `loop()` — メインループ
+### `loop()` — 入力取得→状態遷移→出力更新を状態に応じて実行する
 
-> ※ loop() は「状態ごとに何をするか」だけ書く。細かい処理は各関数に任せる。
+**basic_design.md 2-2 との対応：** 入力取得→状態遷移→出力更新を状態に応じて実行する
+
+**引数：** なし
+
+**戻り値：** なし
 
 ```
 【処理の流れ】
-
 ＜毎ループ実行すること＞
-  - 入力を読む（readButton(), readSensor() などを呼ぶ）
   - 現在時刻を取得: now = millis()
+  - readButtons(), readAnalogStick()で入力取得
+  - updateState()で状態遷移判定
 
-＜currentState が 0（待機中）のとき＞
-  - センサー値を監視する
-  - 検知条件を満たしたら → currentState = 1
+＜currentStateが待機中のとき＞
+  - 入力開始待ち。入力があれば入力中へ遷移
 
-＜currentState が 1（動作中）のとき＞
-  - メイン処理を行う
-  - 終了条件を満たしたら → currentState = 2
+＜currentStateが入力中のとき＞
+  - doAnalogStickInput(), doOperatorSelect(), doAnalogStickPress(), doConfirmInput()などを呼ぶ
+  - 入力確定で計算中へ、取消で待機中へ、異常検知でエラー中へ遷移
 
-＜currentState が 2（完了）のとき＞
-  - 完了表示をする
-  - リセットボタンが押されたら → currentState = 0
+＜currentStateが計算中のとき＞
+  - doCalculate(), doErrorCheck()を呼ぶ
+  - 計算完了で結果表示中へ、エラーならエラー中へ遷移
 
-＜currentState が 3（エラー）のとき＞
-  - エラー表示をする / リセットを待つ
-```
+＜currentStateが結果表示中のとき＞
+  - doDisplayResult(), doBuzz()を呼ぶ
+  - 次の入力開始や待機戻り、リセットで状態遷移
 
-**↓ 自分の loop() を設計してください**
-```
-【処理の流れ】
+＜currentStateがエラー中のとき＞
+  - エラー内容表示、リセット待ち
 
-＜毎ループ実行すること＞
-
-
-＜currentState が 　　 のとき＞
-
-
-＜currentState が 　　 のとき＞
-
-
-＜currentState が 　　 のとき＞
-
+＜currentStateがリセット中のとき＞
+  - doReset()を呼び、初期状態へ
 ```
 
 ---
 
-### （関数ごとに以下のブロックをコピーして追加してください）
+### `readButtons()` — D3〜D7のボタン状態を読み、デバウンス後に btn* 変数を更新する
 
-> ※ 基本設計書 2-2 の関数一覧に記載した関数を1つずつ設計します。
+**basic_design.md 2-2 との対応：** D3〜D7のボタン状態を読み、デバウンス後に btn* 変数を更新する
 
----
+**引数：** なし
 
-### `関数名()` — （役割を1行で書く）
-
-**basic_design.md 2-2 との対応：** （基本設計書の関数一覧の説明を転記）
-
-**引数：** `引数名`（型）: 何の値か
-
-**戻り値：** 型（なしの場合は void）
+**戻り値：** なし
 
 ```
 【処理の流れ】
-1.
-2.
-3.
+1. 各ボタンピンの値をdigitalReadで取得
+2. 前回値・時刻と比較し、DEBOUNCE_MS以上経過していれば状態確定
+3. btnOpPressed等の変数を更新
 
 【エラー・異常ケース】
-- 異常な値が来た場合:
+- チャタリング時は入力を無視
+```
+
+---
+
+### `readAnalogStick()` — A0/A1/D2を読み、analogX, analogY, stickPressed, stickDirection を更新する
+
+**basic_design.md 2-2 との対応：** A0/A1/D2を読み、analogX, analogY, stickPressed, stickDirection を更新する
+
+**引数：** なし
+
+**戻り値：** なし
+
+```
+【処理の流れ】
+1. analogReadでX/Y軸値を取得
+2. D2で押込み状態を取得
+3. STICK_DEADZONE/THRESHOLDで方向判定し、stickDirectionを更新
+4. stickPressedも更新
+
+【エラー・異常ケース】
+- X/Yが極端値で固着していればエラー検知
+```
+
+---
+
+### `updateState()` — currentState と prevState を更新し、遷移条件を判定する
+
+**basic_design.md 2-2 との対応：** currentState と prevState を更新し、遷移条件を判定する
+
+**引数：** なし
+
+**戻り値：** なし
+
+```
+【処理の流れ】
+1. prevState = currentState
+2. 入力・フラグに応じて状態遷移条件を判定
+3. 必要に応じてcurrentStateを変更
+
+【エラー・異常ケース】
+- 不正な遷移はエラー中へ
+```
+
+---
+
+### `doAnalogStickInput()` — stickDirection と digitRangeMode から入力数字を確定し inputBuffer に反映する
+
+**basic_design.md 2-2 との対応：** stickDirection と digitRangeMode から入力数字を確定し inputBuffer に反映する
+
+**引数：** stickDirection(int8_t), digitRangeMode(uint8_t)
+
+**戻り値：** なし
+
+```
+【処理の流れ】
+1. stickDirection, digitRangeModeから入力数字を決定
+2. inputBufferに桁追加、inputDigitsを更新
+3. 入力上限超過時は無視または警告
+
+【エラー・異常ケース】
+- stickDirectionが-1や異常値なら入力無効
+```
+
+---
+
+### `doOperatorSelect()` — btnOpPressed で currentOperator を +,-,*,/ の順に切り替える
+
+**basic_design.md 2-2 との対応：** btnOpPressed で currentOperator を +,-,*,/ の順に切り替える
+
+**引数：** btnOpPressed(bool)
+
+**戻り値：** なし
+
+```
+【処理の流れ】
+1. btnOpPressedが立ち上がったらcurrentOperatorを次の演算子に切替
+2. 表示・状態も更新
+
+【エラー・異常ケース】
+- 不正な演算子値は+に戻す
+```
+
+---
+
+### `doAnalogStickPress()` — stickPressed により digitRangeMode（0〜4/5〜9）を切り替える
+
+**basic_design.md 2-2 との対応：** stickPressed により digitRangeMode（0〜4/5〜9）を切り替える
+
+**引数：** stickPressed(bool)
+
+**戻り値：** なし
+
+```
+【処理の流れ】
+1. stickPressedが立ち上がったらdigitRangeModeをトグル
+2. 表示も更新
+
+【エラー・異常ケース】
+- 連打・チャタリング時は無視
+```
+
+---
+
+### `doConfirmInput()` — inputBuffer を operand1 または operand2 に確定し hasOperand* を更新する
+
+**basic_design.md 2-2 との対応：** inputBuffer を operand1 または operand2 に確定し hasOperand* を更新する
+
+**引数：** btnConfirmPressed(bool), inputBuffer(long)
+
+**戻り値：** なし
+
+```
+【処理の流れ】
+1. btnConfirmPressedが立ち上がったらinputBufferをオペランドへ確定
+2. hasOperand1/2を更新、inputBufferクリア
+
+【エラー・異常ケース】
+- 入力値が不正なら無視
+```
+
+---
+
+### `doCalculate()` — operand1, operand2, currentOperator で演算し calcResult を更新する
+
+**basic_design.md 2-2 との対応：** operand1, operand2, currentOperator で演算し calcResult を更新する
+
+**引数：** operand1(long), operand2(long), currentOperator(char)
+
+**戻り値：** bool（成功/失敗）
+
+```
+【処理の流れ】
+1. オペランド・演算子に応じて四則演算を実行
+2. 結果をcalcResultに格納
+3. オーバーフローや0除算は失敗として返す
+
+【エラー・異常ケース】
+- 0除算や範囲外演算はエラー
+```
+
+---
+
+### `doReset()` — 変数初期化、表示クリア、ブザー停止を行い待機状態に戻す
+
+**basic_design.md 2-2 との対応：** 変数初期化、表示クリア、ブザー停止を行い待機状態に戻す
+
+**引数：** btnResetPressed(bool)
+
+**戻り値：** なし
+
+```
+【処理の流れ】
+1. btnResetPressedが立ち上がったら全変数初期化
+2. シリアル表示クリア、ブザー停止
+3. currentStateを待機中へ
+
+【エラー・異常ケース】
+- 途中で異常があれば強制初期化
+```
+
+---
+
+### `doDisplayResult()` — operand1 演算子 operand2 = calcResult 形式でシリアル表示する
+
+**basic_design.md 2-2 との対応：** operand1 演算子 operand2 = calcResult 形式でシリアル表示する
+
+**引数：** operand1(long), operand2(long), currentOperator(char), calcResult(long)
+
+**戻り値：** なし
+
+```
+【処理の流れ】
+1. シリアルモニタに計算式と結果を表示
+2. hasResultをtrueに
+
+【エラー・異常ケース】
+- 表示バッファ溢れ等は警告
+```
+
+---
+
+### `doErrorCheck()` — 0除算条件とスティック異常を検出し errorCode と状態を更新する
+
+**basic_design.md 2-2 との対応：** 0除算条件とスティック異常を検出し errorCode と状態を更新する
+
+**引数：** currentOperator(char), operand2(long), analogX(int), analogY(int)
+
+**戻り値：** bool（エラー有無）
+
+```
+【処理の流れ】
+1. currentOperatorが'/'かつoperand2==0ならerrorCode=1
+2. analogX/analogYが極端値ならerrorCode=2
+3. エラー時はcurrentStateをエラー中へ
+
+【エラー・異常ケース】
+- その他異常値も検出
+```
+
+---
+
+### `doBuzz()` — buzzerActive と時刻差で非ブロッキングに鳴動開始/停止を制御する
+
+**basic_design.md 2-2 との対応：** buzzerActive と時刻差で非ブロッキングに鳴動開始/停止を制御する
+
+**引数：** buzzerActive(bool), lastBuzzerStartMs(unsigned long)
+
+**戻り値：** なし
+
+```
+【処理の流れ】
+1. 結果表示時にbuzzerActive=falseなら鳴動開始、lastBuzzerStartMs=now
+2. 鳴動中は経過時間を監視し、BUZZER_DURATION_MS経過で停止
+
+【エラー・異常ケース】
+- 鳴動取りこぼし時は強制停止
 ```
 
 ---
@@ -170,18 +397,18 @@
 
 ```
 【考え方】
-  ボタンが押されたとき、50ms 以内の連続入力は「同じ1回の押下」として無視する。
+  タクトスイッチ等の物理ボタンは押下・離上時にノイズ（チャタリング）が発生するため、50ms以内の連続変化は同一イベントとして無視する。
 
 【処理の流れ】
-  1. ボタンのデジタル値を読む（digitalRead）
-  2. 前回確定した時刻（lastDebounceTime）からの経過時間を計算する
-  3. 経過時間 < DEBOUNCE_DELAY（例: 50ms）→ 無視する
-  4. 経過時間 ≥ DEBOUNCE_DELAY → ボタンの状態として確定する
-  5. lastDebounceTime を更新する
+  1. 各ボタンピンの値をdigitalReadで取得
+  2. 前回確定時刻（lastDebounceMs[]）からの経過時間を計算
+  3. 経過時間 < DEBOUNCE_MS（50ms）なら入力を無視
+  4. 経過時間 >= DEBOUNCE_MSならボタン状態を確定し、lastDebounceMs[]を更新
+  5. btn*Pressed変数を更新
 
-【必要な変数（Section 1 に追加済みか確認）】
-  lastDebounceTime : unsigned long   // 前回確定した時刻
-  DEBOUNCE_DELAY   : const int = 50  // チャタリング判定時間（ms）
+【必要な変数】
+  lastDebounceMs[5] : unsigned long[]  // 各ボタンの最終入力時刻
+  DEBOUNCE_MS : const unsigned long = 50
 ```
 
 ---
@@ -190,33 +417,56 @@
 
 ```
 【考え方】
-  「前回実行した時刻」を記録しておき、「今の時刻 − 前回時刻 ≥ 周期」なら実行する。
+  delay()を使わず、millis()で「前回実行時刻との差分」を判定し、周期処理や非ブロッキング制御を実現する。
 
-【処理の流れ（例: LED点滅）】
-  1. now = millis()
-  2. now - lastMillis_LED >= LED_INTERVAL かどうか確認
-  3. 条件を満たした場合: LEDのON/OFFを切り替え、lastMillis_LED = now
-  4. 条件を満たさない場合: 何もしない（次のループで再チェック）
+【処理の流れ（例: 入力・ブザー・表示）】
+  1. now = millis() で現在時刻取得
+  2. now - lastInputPollMs >= INPUT_POLL_MS なら入力取得・更新、lastInputPollMs = now
+  3. now - lastBuzzerStartMs >= BUZZER_DURATION_MS ならブザー停止
+  4. その他、必要な周期ごとに同様の判定
 
 【自分のシステムで millis() を使う処理】
-  （basic_design.md 2-3 のタイミング設計から転記して具体化する）
+  - ボタン入力読出: 10ms周期
+  - スティック読出: 20ms周期
+  - 入力確定/演算子切替: 入力ごと
+  - ブザー鳴動制御: 結果表示時に開始、指定時間後に停止
+  - シリアル表示: 状態遷移時＋200ms間隔
+  - 状態遷移判定: 毎ループ
 ```
 
 ---
 
-### 3-3. その他の重要ロジック（任意）
-
-> **【任意】** 複雑なロジックがある場合のみ記入してください。
-> 例：「距離に応じたLED点灯パターン」「ゲームの衝突判定」「温度の閾値判定」
+### 3-3. スティック方向判定・異常検知ロジック
 
 ```
+【考え方】
+  アナログスティックのX/Y値から方向を判定し、中心付近ノイズや極端値による異常も検出する。
+
 【処理の流れ】
-1.
-2.
-3.
+  1. analogX, analogYを取得
+  2. |analogX-512|, |analogY-512| < STICK_DEADZONEなら「入力なし」扱い
+  3. しきい値（STICK_THRESHOLD）を超えた軸で方向を決定（優先軸ルール）
+  4. X/Yが0または1023等の極端値で一定時間継続→スティック異常（errorCode=2）
 
 【入力値と出力値の関係】
+  - 中心付近は入力無効
+  - 斜め/境界は優先軸で1方向に確定
+  - 極端値はエラー
+```
 
+---
+
+### 3-4. オーバーフロー・0除算・入力不足検出ロジック
+
+```
+【考え方】
+  計算時にlong型の範囲外や0除算、オペランド未確定などの異常を事前に検出し、エラー状態へ遷移させる。
+
+【処理の流れ】
+  1. 計算前にhasOperand1/2を確認し、未確定ならエラー
+  2. currentOperatorが'/'かつoperand2==0なら0除算エラー
+  3. 加算・乗算時はlong型範囲を超える場合はオーバーフローエラー
+  4. エラー時はerrorCodeを設定し、currentStateをエラー中へ
 ```
 
 ---
@@ -229,10 +479,15 @@
 
 | No | 確認したい内容 | 挿入する関数 | Serial.println の内容例 |
 |:---|:---|:---|:---|
-| 1 | センサー値が正しく取れているか | `readSensor()` | `Serial.println(sensorValue);` |
-| 2 | 状態遷移が正しく起きているか | `loop()` | `Serial.println(currentState);` |
-| 3 | チャタリング処理が効いているか | `readButton()` | `Serial.println("btn confirmed");` |
-| 4 |  |  |  |
+| 1 | ボタン入力が正しく取れているか | `readButtons()` | `Serial.println(btnOpPressed);` |
+| 2 | スティック値・方向判定が正しいか | `readAnalogStick()` | `Serial.print(analogX); Serial.print(","); Serial.print(analogY); Serial.print(","); Serial.println(stickDirection);` |
+| 3 | 状態遷移が正しく起きているか | `loop()`, `updateState()` | `Serial.println(currentState);` |
+| 4 | 入力バッファ・オペランド確定の流れ | `doAnalogStickInput()`, `doConfirmInput()` | `Serial.println(inputBuffer); Serial.println(operand1); Serial.println(operand2);` |
+| 5 | 演算子切替が正しく動作するか | `doOperatorSelect()` | `Serial.println(currentOperator);` |
+| 6 | 計算結果・エラー検知の流れ | `doCalculate()`, `doErrorCheck()` | `Serial.println(calcResult); Serial.println(errorCode);` |
+| 7 | ブザー鳴動タイミング | `doBuzz()` | `Serial.println("buzzer on"); Serial.println("buzzer off");` |
+| 8 | チャタリング処理が効いているか | `readButtons()` | `Serial.println("btn confirmed");` |
+| 9 | 異常系（0除算・スティック異常）検知 | `doErrorCheck()` | `Serial.println("error: 0-div"); Serial.println("error: stick");` |
 
 ---
 
@@ -245,26 +500,30 @@
 
 | No | テスト対象の関数 | 入力・操作 | 期待する結果 | 実際の結果 | 合否 |
 |:---|:---|:---|:---|:---|:---|
-| 1 | readButton() | タクトスイッチを1回押す | true が返る | | [ ] |
-| 2 | readButton() | スイッチを素早く2回押す | 1回分だけ true になる | | [ ] |
-| 3 | readSensor() | センサーを正常範囲で使う | 仕様範囲内の値が返る | | [ ] |
-| 4 | readSensor() | センサーを遮蔽・範囲外に向ける | 誤動作しない | | [ ] |
-| 5 | （自分の関数を追加） | | | | [ ] |
+| 1 | readButtons() | 各タクトスイッチを1回ずつ押す | 対応するbtn*Pressedがtrueになる | | [ ] |
+| 2 | readButtons() | スイッチを素早く2回押す | 1回分だけtrueになる（チャタリング無効） | | [ ] |
+| 3 | readAnalogStick() | スティックを各方向に倒す | stickDirectionが正しく変化 | | [ ] |
+| 4 | readAnalogStick() | スティック押込みを行う | stickPressedがtrueになる | | [ ] |
+| 5 | doAnalogStickInput() | 方向入力ごとに数字入力 | inputBufferに正しい数字が追加 | | [ ] |
+| 6 | doOperatorSelect() | 演算子切替ボタンを複数回押す | currentOperatorが循環する | | [ ] |
+| 7 | doConfirmInput() | 入力確定ボタン押下 | operand1/2に値が確定 | | [ ] |
+| 8 | doErrorCheck() | 0除算条件で計算実行 | errorCode=1, エラー状態遷移 | | [ ] |
+| 9 | doErrorCheck() | スティック極端値で入力 | errorCode=2, エラー状態遷移 | | [ ] |
 
 ### 5-2. 出力系テスト
 
 | No | テスト対象の関数 | 入力・操作 | 期待する結果 | 実際の結果 | 合否 |
 |:---|:---|:---|:---|:---|:---|
-| 1 | updateOutput(0) | state=0（待機中）を渡す | 緑LEDが点滅する | | [ ] |
-| 2 | updateOutput(1) | state=1（動作中）を渡す | 赤LEDが点灯、ブザーが鳴る | | [ ] |
-| 3 | （自分の状態・関数を追加） | | | | [ ] |
+| 1 | doDisplayResult() | 計算完了後 | シリアルに"operand1 operator operand2 = result"が表示 | | [ ] |
+| 2 | doBuzz() | 結果表示時 | ブザーが1回鳴動し、指定時間後に停止 | | [ ] |
+| 3 | doReset() | リセットボタン押下 | 全変数初期化・表示クリア・ブザー停止 | | [ ] |
 
 ### 5-3. タイミング・並行動作テスト
 
 | No | テスト内容 | テスト手順 | 期待する結果 | 実際の結果 | 合否 |
 |:---|:---|:---|:---|:---|:---|
-| 1 | delay()による処理停止がないか | LED点滅中にボタンを押す | ボタン入力が無視されない | | [ ] |
-| 2 | millis()タイマーの周期精度 | 点滅をストップウォッチで確認 | 設計した周期（例:500ms）通りに点滅 | | [ ] |
+| 1 | delay()による処理停止がないか | ブザー鳴動中や表示中にボタン入力 | 入力が取りこぼされず反映される | | [ ] |
+| 2 | millis()タイマーの周期精度 | 入力・ブザー・表示の周期をストップウォッチ等で確認 | 設計値通りの周期で動作 | | [ ] |
 
 ---
 
@@ -309,4 +568,4 @@
 
 ---
 
-*初版: YYYY-MM-DD / AIレビュー: YYYY-MM-DD / グループレビュー後更新: YYYY-MM-DD*
+*初版: 2026-05-22 / AIレビュー: 2026-05-22 / グループレビュー後更新: 2026-05-22*
