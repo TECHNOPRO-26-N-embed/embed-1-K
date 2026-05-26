@@ -89,6 +89,8 @@ bool hasOperand2 = false;
 bool hasResult = false;
 // 現在保持中のエラーコード
 uint8_t errorCode = ERROR_NONE;
+// ERROR状態の入場メッセージを1回化するフラグ
+bool errorEntryShown = false;
 
 // 直近で読み取ったスティック生値と入力イベント
 long analogX = 512;
@@ -173,6 +175,20 @@ void setup() {
 
   // 起動通知音
   tone(PIN_BUZZER, BUZZER_FREQ_HZ, 80);
+
+  Serial.println(F(""));
+  Serial.println(F("=== 2項演算電卓ガイド ==="));
+  Serial.println(F("[数字入力]"));
+  Serial.println(F("- スティックを倒す: 1桁選択（0-4 または 5-9）"));
+  Serial.println(F("- スティック押し込み: 桁レンジ切替"));
+  Serial.println(F("- CONFIRM: 現在入力を確定"));
+  Serial.println(F(" * 1回目の確定 -> operand1"));
+  Serial.println(F(" * 2回目の確定 -> operand2"));
+  Serial.println(F("[演算子] OPボタンで + -> - -> * -> /"));
+  Serial.println(F("[実行] 2つのオペランド確定後にCALC"));
+  Serial.println(F("[取消] 入力中 -> operand2 -> operand1 の順で戻る"));
+  Serial.println(F("[リセット] 初期状態に戻る"));
+  Serial.println(F("[エラー] ERROR状態はCANCELで解除"));
 }
 
 // 入力読取・状態遷移・状態別処理を1周期で実行するメインループ。
@@ -197,7 +213,7 @@ void loop() {
     if (btnCancelPressed) {
       if (inputDigits > 0) {
         clearInputBuffer();
-        showInputStatus();
+        //showInputStatus();
       } else if (hasOperand2) {
         operand2 = 0;
         hasOperand2 = false;
@@ -220,6 +236,8 @@ void loop() {
         noTone(PIN_BUZZER);
         buzzerActive = false;
         Serial.println(F("state: IDLE"));
+        // 入場処理を消費したら、次ループで再実行しないよう同期する。
+        prevState = STATE_IDLE;
       }
       break;
 
@@ -228,7 +246,9 @@ void loop() {
         // 結果表示のフラグをクリアして新規入力へ
         hasResult = false;
         Serial.println(F("state: INPUT"));
-        showInputStatus();
+        // 入場処理を消費したら、次ループで再実行しないよう同期する。
+        prevState = STATE_INPUT;
+        //showInputStatus();
       }
       break;
 
@@ -260,15 +280,18 @@ void loop() {
         doDisplayResult(operand1, operand2, currentOperator, calcResult);
         // doBuzz() が初回呼び出しで鳴動開始できるようfalseに初期化
         buzzerActive = false;
+        // 入場処理を消費したら、次ループで再実行しないよう同期する。
+        prevState = STATE_RESULT;
       }
       // 結果状態の間だけブザー制御
       doBuzz(buzzerActive, lastBuzzerStartMs);
       break;
 
     case STATE_ERROR:
-      if (prevState != STATE_ERROR) {
+      if (!errorEntryShown) {
         // エラー状態に入った瞬間に原因を表示
         showError();
+        errorEntryShown = true;
       }
       // キャンセル押下でエラー解除して待機へ戻る
       if (btnCancelPressed) {
@@ -398,6 +421,16 @@ void readAnalogStick() {
     // 第2象限
     stickDirection = DIR_LEFT_UP;
   }
+  /* デバッグ用にスティック状態をシリアル出力
+   これにより、スティックの傾きと押し込みが正しく認識されているか確認できる。
+   また、異常な値が継続していないかも監視できる。
+  *//*
+  Serial.print(F("analogX: "));
+  Serial.print(analogX);
+  Serial.print(F(", analogY: "));
+  Serial.print(analogY);
+  Serial.print(F(", stickDirection: "));
+  Serial.println(stickDirection);*/
 
   static unsigned long extremeSinceMs = 0;
   bool extremeValue = (analogX <= 1 || analogX >= 2000 || analogY <= 1 || analogY >= 2000);
@@ -430,9 +463,9 @@ void updateState() {
 
   switch (currentState) {
     case STATE_IDLE:
-      // すでにIDLEなら何もしない。状態が変わるときだけchangeStateを呼ぶ
-      if (currentState == STATE_IDLE && (inputDigits > 0 || hasOperand1 || hasOperand2)) {
-        // 入力が存在し始めたら入力状態へ
+      // 待機中に入力操作が始まったら入力状態へ遷移する。
+      // これにより、初回のスティック押し込み/倒しから入力を開始できる。
+      if (stickPressed || stickDirection != DIR_NONE || inputDigits > 0 || hasOperand1 || hasOperand2) {
         changeState(STATE_INPUT);
       }
       break;
@@ -461,6 +494,18 @@ void updateState() {
         // 結果を破棄して待機へ
         clearCalculationContext();
         changeState(STATE_IDLE);
+      }
+      if (btnOpPressed) {
+        // 演算子押下時は直前結果を次計算の第1オペランドとして引き継ぐ
+        operand1 = calcResult;
+        hasOperand1 = true;
+        operand2 = 0;
+        hasOperand2 = false;
+        hasResult = false;
+        clearInputBuffer();
+        errorCode = ERROR_NONE;
+        changeState(STATE_INPUT);
+        break;
       }
       if (stickDirection != DIR_NONE || btnConfirmPressed) {
         // 何か入力が始まったら新しい計算セッションへ
@@ -679,6 +724,10 @@ void changeState(uint8_t newState) {
   }
   prevState = currentState;
   currentState = newState;
+  if (newState == STATE_ERROR) {
+    // ERRORへ入るたびに1回表示フラグをリセット
+    errorEntryShown = false;
+  }
   stateEnteredMs = nowMs;
 }
 
@@ -718,6 +767,7 @@ void clearAllRuntime() {
   btnCalcPressed = false;
   btnResetPressed = false;
   btnCancelPressed = false;
+  errorEntryShown = false;
   buzzerActive = false;
   lastBuzzerStartMs = 0;
   lastInputPollMs = 0;
@@ -731,14 +781,15 @@ void clearAllRuntime() {
 // 現在の入力バッファ状態と演算子をシリアルへ表示する。
 void showInputStatus() {
   // 現在の入力進捗を1行で可視化
-  Serial.print(F("input="));
+  //Serial.print(F("input= "));
   Serial.print(inputBuffer);
-  Serial.print(F(" digits="));
+  Serial.print("\n");
+  /*Serial.print(F(" digits= "));
   Serial.print(inputDigits);
-  Serial.print(F(" range="));
+  Serial.print(F(" range= "));
   Serial.print((digitRangeMode == 0) ? F("0-4") : F("5-9"));
-  Serial.print(F(" op="));
-  Serial.println(currentOperator);
+  Serial.print(F(" op= "));
+  Serial.println(currentOperator);*/
 }
 
 // エラーコードに対応するメッセージをシリアルへ表示する。

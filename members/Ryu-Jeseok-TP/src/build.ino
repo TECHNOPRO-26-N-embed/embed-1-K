@@ -1,19 +1,33 @@
+#define IR_USE_AVR_TIMER1
 #include <Arduino.h>
-#include <Wire.h>
-#include <LiquidCrystal_I2C.h>
+#include <LiquidCrystal.h>
 #include <IRremote.hpp>
 
 // -------------------- ピン割り当て --------------------
-const byte PIN_IR = 2;       // Arduino D2  -> IR受信モジュール OUT
+const byte PIN_IR = 11;      // Arduino D11 -> IR受信モジュール OUT
 const byte PIN_BUZZER = 3;   // Arduino D3  -> パッシブブザー (+)
 const byte PIN_LED_R = 5;    // Arduino D5  -> RGB LED R（220ohm直列）
 const byte PIN_LED_G = 6;    // Arduino D6  -> RGB LED G（220ohm直列）
 const byte PIN_LED_B = 9;    // Arduino D9  -> RGB LED B（220ohm直列）
-// Arduino A4 -> LCD I2C SDA
-// Arduino A5 -> LCD I2C SCL
+
+// LCD(16x2) 並列接続
+const byte LCD_PIN_RS = 7;   // LCD 4番  -> Arduino D7
+const byte LCD_PIN_EN = 8;   // LCD 6番  -> Arduino D8
+const byte LCD_PIN_D4 = 2;   // LCD 11番 -> Arduino D2
+const byte LCD_PIN_D5 = 4;   // LCD 12番 -> Arduino D4
+const byte LCD_PIN_D6 = 12;  // LCD 13番 -> Arduino D12
+const byte LCD_PIN_D7 = 13;  // LCD 14番 -> Arduino D13
 
 // -------------------- デバイス設定 ----------------------
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+LiquidCrystal lcd(LCD_PIN_RS, LCD_PIN_EN, LCD_PIN_D4, LCD_PIN_D5, LCD_PIN_D6, LCD_PIN_D7);
+
+// true: 通常運転（リモコン入力あり）
+// false: 動作確認モード（リモコン入力なし、起動直後から音/光/LCDを同時出力）
+const bool ENABLE_REMOTE_INPUT = true;
+const bool REMOTE_DEBUG_PRINT = true;
+
+// ★수정됨: 소등 시 켜진다면 사용 중인 LED가 공통 캐소드 방식이므로 false로 변경
+const bool RGB_COMMON_ANODE = false;
 
 // アプリ全体の状態遷移
 enum AppState : byte {
@@ -22,7 +36,6 @@ enum AppState : byte {
   STATE_QUIZ = 2,
   STATE_ERROR = 3
 };
-
 AppState currentState = STATE_TIME_SETUP;
 
 // -------------------- 時刻管理とタイマー ----------------
@@ -38,6 +51,7 @@ unsigned long lastLcdMillis = 0;
 unsigned long lastIrReceiveMs = 0;
 unsigned long lastPatternMs = 0;
 unsigned long lastLedPatternMs = 0;
+unsigned long lastRawIrCode = 0;
 
 const unsigned long DEBOUNCE_DELAY_MS = 50;
 const unsigned long CLOCK_STEP_MS = 60000;
@@ -46,31 +60,24 @@ const unsigned long IDLE_BLINK_MS = 500;
 const unsigned long BEEP_TOGGLE_MS = 200;
 const unsigned long TONE_PATTERN_SWITCH_MS = 3000;
 const unsigned long LED_PATTERN_SWITCH_MS = 1000;
+const unsigned long QUIZ_INPUT_TIMEOUT_MS = 5000;
 
 // -------------------- 入力/クイズ管理 -------------------
 unsigned long irCode = 0;
-byte errorType = 0;  // 0:なし 1:範囲外 2:受信失敗 3:不正キー
+byte errorType = 0; 
+// 0:なし 1:範囲外 2:受信失敗 3:不正キー
 
 char inputDigits[5] = {'0', '0', '0', '0', '\0'};
 byte inputIndex = 0;
 bool isAlarmInputPhase = false;
 
-struct QuizItem {
-  const char *question;
-  int answer;
-};
-
-QuizItem quizTable[] = {
-  {"2+3=?", 5},
-  {"7-4=?", 3},
-  {"6/2=?", 3}
-};
-
-const byte QUIZ_COUNT = sizeof(quizTable) / sizeof(quizTable[0]);
-byte quizIndex = 0;
+// ★수정됨: 동적 퀴즈용 변수
+char currentQuestion[16] = {'\0'};
+int currentAnswer = 0;
 
 char quizInput[6] = {'\0'};
 byte quizInputIndex = 0;
+unsigned long lastQuizInputMs = 0;
 
 bool isAlarmRinging = false;
 byte toneMode = 0;
@@ -78,19 +85,31 @@ byte ledMode = 0;
 int lastTriggeredMinuteOfDay = -1;
 
 // -------------------- IRキー割り当て --------------------
-// 21キー系リモコンの代表値。実機と違う場合はここだけ調整する。
-const byte IR_CMD_0 = 0x19;
-const byte IR_CMD_1 = 0x45;
-const byte IR_CMD_2 = 0x46;
-const byte IR_CMD_3 = 0x47;
-const byte IR_CMD_4 = 0x44;
-const byte IR_CMD_5 = 0x40;
-const byte IR_CMD_6 = 0x43;
-const byte IR_CMD_7 = 0x07;
-const byte IR_CMD_8 = 0x15;
-const byte IR_CMD_9 = 0x09;
-const byte IR_CMD_OK = 0x1C;     // OK
-const byte IR_CMD_CLEAR = 0x16;  // *
+// 21キー系リモコンの代表値（NECコマンド）
+const byte IR_CMD_0 = 0x16;
+const byte IR_CMD_1 = 0x0C;
+const byte IR_CMD_2 = 0x18;
+const byte IR_CMD_3 = 0x5E;
+const byte IR_CMD_4 = 0x08;
+const byte IR_CMD_5 = 0x1C;
+const byte IR_CMD_6 = 0x5A;
+const byte IR_CMD_7 = 0x42;
+const byte IR_CMD_8 = 0x52;
+const byte IR_CMD_9 = 0x4A;
+
+const byte IR_CMD_POWER = 0x45;
+const byte IR_CMD_FUNC_STOP = 0x46;
+const byte IR_CMD_VOL_PLUS = 0x47;
+const byte IR_CMD_PREV = 0x44;
+const byte IR_CMD_PLAY_PAUSE = 0x40;
+const byte IR_CMD_NEXT = 0x43;
+const byte IR_CMD_DOWN = 0x07;
+const byte IR_CMD_VOL_MINUS = 0x15;
+const byte IR_CMD_EQ = 0x09;
+const byte IR_CMD_ST_REPT = 0x19;
+
+const byte IR_CMD_OK = 0xFF;                // 未使用
+const byte IR_CMD_CLEAR = IR_CMD_FUNC_STOP; // 入力クリア
 
 // -------------------- 関数宣言 --------------------------
 unsigned long readRemoteCode();
@@ -100,25 +119,26 @@ void updateAlarmOutputs(byte state);
 bool handleTimeInput(bool isAlarmInput);
 bool checkAlarmTrigger();
 void startAlarmSequence();
+void generateNewQuiz();
 void runQuizStep();
-bool judgeQuizAnswer(unsigned long keyCode);
 void playErrorBeep(byte errorTypeParam);
 void setAlarmToneMode(byte mode);
 void setLedColorMode(byte colorMode);
 void mixAlarmTonePatterns(unsigned long nowMs);
 void mixLedFlashPatterns(unsigned long nowMs);
-
 int decodeDigitFromCommand(byte cmd);
+int decodeDigitFromRaw(unsigned long rawCode);
 bool isOkCommand(byte cmd);
 bool isClearCommand(byte cmd);
+bool isIgnoredControlCommand(byte cmd);
 void resetTimeInput();
 void resetQuizInput();
 void setRgb(byte r, byte g, byte b);
 void printLcdLine(byte row, const char *text);
 void formatTime(char *out, byte hh, byte mm);
+void runOutputSelfTest();
 
 void setup() {
-  // 各ピンの入出力モードを設定
   pinMode(PIN_IR, INPUT);
   pinMode(PIN_BUZZER, OUTPUT);
   pinMode(PIN_LED_R, OUTPUT);
@@ -126,14 +146,20 @@ void setup() {
   pinMode(PIN_LED_B, OUTPUT);
 
   Serial.begin(9600);
+  randomSeed(analogRead(A0)); // 난수 시드 초기화
 
-  // IR受信開始（内蔵LEDフィードバック無効）
-  IrReceiver.begin(PIN_IR, DISABLE_LED_FEEDBACK);
+  if (ENABLE_REMOTE_INPUT) {
+    IrReceiver.begin(PIN_IR, DISABLE_LED_FEEDBACK);
+  }
 
-  lcd.init();
-  lcd.backlight();
+  lcd.begin(16, 2);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("LCD START OK");
+  lcd.setCursor(0, 1);
+  lcd.print("PARALLEL MODE");
+  delay(1200);
 
-  // 初期状態へリセット
   currentState = STATE_TIME_SETUP;
   resetTimeInput();
   resetQuizInput();
@@ -145,17 +171,19 @@ void setup() {
   lastBeepMillis = nowMs;
   lastLcdMillis = 0;
   lastIrReceiveMs = 0;
+  lastRawIrCode = 0;
   lastPatternMs = nowMs;
   lastLedPatternMs = nowMs;
 
-  // 起動確認として青色を短時間点灯
-  setRgb(0, 0, 255);
-  delay(300);
   setRgb(0, 0, 0);
 }
 
 void loop() {
-  // 毎ループ共通処理（入力取得・時刻更新・表示・出力）
+  if (!ENABLE_REMOTE_INPUT) {
+    runOutputSelfTest();
+    return;
+  }
+
   irCode = readRemoteCode();
   updateClockByMillis();
   updateLcdView(currentState);
@@ -163,7 +191,6 @@ void loop() {
 
   switch (currentState) {
     case STATE_TIME_SETUP:
-      // 現在時刻入力フェーズ -> アラーム時刻入力フェーズ
       if (!isAlarmInputPhase) {
         if (handleTimeInput(false)) {
           isAlarmInputPhase = true;
@@ -182,7 +209,6 @@ void loop() {
       break;
 
     case STATE_IDLE:
-      // アラーム時刻一致で出題状態へ
       if (checkAlarmTrigger()) {
         startAlarmSequence();
         currentState = STATE_QUIZ;
@@ -190,7 +216,6 @@ void loop() {
       break;
 
     case STATE_QUIZ:
-      // 出題・回答受付
       runQuizStep();
       if (errorType != 0) {
         currentState = STATE_ERROR;
@@ -198,7 +223,6 @@ void loop() {
       break;
 
     case STATE_ERROR:
-      // エラー通知後に設定状態へ戻す
       playErrorBeep(errorType);
       resetTimeInput();
       resetQuizInput();
@@ -209,19 +233,31 @@ void loop() {
 }
 
 unsigned long readRemoteCode() {
-  // 受信データがない場合は0
   if (!IrReceiver.decode()) {
     return 0;
   }
 
   unsigned long nowMs = millis();
   byte cmd = IrReceiver.decodedIRData.command;
+  lastRawIrCode = IrReceiver.decodedIRData.decodedRawData;
+
+  if ((IrReceiver.decodedIRData.flags & IRDATA_FLAGS_IS_REPEAT) != 0) {
+    IrReceiver.resume();
+    return 0;
+  }
 
   IrReceiver.resume();
 
-  // 連打/長押しによる重複入力を無視
   if ((nowMs - lastIrReceiveMs) < DEBOUNCE_DELAY_MS) {
     return 0;
+  }
+
+  if (REMOTE_DEBUG_PRINT) {
+    Serial.print("IR CMD: 0x");
+    if (cmd < 16) Serial.print('0');
+    Serial.print(cmd, HEX);
+    Serial.print(" RAW:0x");
+    Serial.println(lastRawIrCode, HEX);
   }
 
   lastIrReceiveMs = nowMs;
@@ -230,7 +266,6 @@ unsigned long readRemoteCode() {
 
 void updateClockByMillis() {
   unsigned long nowMs = millis();
-  // 遅延があっても取りこぼさないよう while で分単位を消化
   while ((nowMs - lastClockMillis) >= CLOCK_STEP_MS) {
     nowMM++;
     if (nowMM >= 60) {
@@ -246,7 +281,6 @@ void updateClockByMillis() {
 
 void updateLcdView(byte state) {
   unsigned long nowMs = millis();
-  // LCD更新しすぎによるちらつきを防止
   if ((nowMs - lastLcdMillis) < LCD_UPDATE_MS) {
     return;
   }
@@ -260,8 +294,8 @@ void updateLcdView(byte state) {
   line2[16] = '\0';
 
   if (state == STATE_TIME_SETUP) {
-    snprintf(line1, 17, "%s TIME INPUT", isAlarmInputPhase ? "ALARM" : "NOW");
-    snprintf(line2, 17, "HHMM:%s", inputDigits);
+    snprintf(line1, 17, "%s HHMM INPUT", isAlarmInputPhase ? "ALARM" : "NOW");
+    snprintf(line2, 17, "4DIGIT:%s", inputDigits);
   } else if (state == STATE_IDLE) {
     char nowStr[6];
     char alarmStr[6];
@@ -270,8 +304,8 @@ void updateLcdView(byte state) {
     snprintf(line1, 17, "NOW   %s", nowStr);
     snprintf(line2, 17, "ALARM %s", alarmStr);
   } else if (state == STATE_QUIZ) {
-    snprintf(line1, 17, "Q%d:%s", quizIndex + 1, quizTable[quizIndex].question);
-    snprintf(line2, 17, "ANS:%s", quizInput);
+    snprintf(line1, 17, "Q: %s", currentQuestion);
+    snprintf(line2, 17, "ANS: %s", quizInput);
   } else {
     snprintf(line1, 17, "INPUT ERROR");
     if (errorType == 1) {
@@ -292,57 +326,25 @@ void updateLcdView(byte state) {
 void updateAlarmOutputs(byte state) {
   unsigned long nowMs = millis();
 
-  if (state == STATE_TIME_SETUP) {
-    setRgb(0, 0, 255);  // 設定中は青固定
+  if (state == STATE_TIME_SETUP || state == STATE_IDLE || state == STATE_ERROR) {
+    setRgb(0, 0, 0);
     noTone(PIN_BUZZER);
-    return;
-  }
-
-  if (state == STATE_IDLE) {
-    noTone(PIN_BUZZER);
-    // 待機中は緑をゆっくり点滅
-    if ((nowMs - lastBlinkMillis) >= IDLE_BLINK_MS) {
-      lastBlinkMillis = nowMs;
-      static bool on = false;
-      on = !on;
-      if (on) {
-        setRgb(0, 255, 0);
-      } else {
-        setRgb(0, 0, 0);
-      }
-    }
     return;
   }
 
   if (state == STATE_QUIZ) {
-    // 出題中は音・光を並行して更新
+    if (!isAlarmRinging) {
+      setRgb(0, 0, 0);
+      noTone(PIN_BUZZER);
+      return;
+    }
     mixAlarmTonePatterns(nowMs);
     mixLedFlashPatterns(nowMs);
     return;
   }
-
-  if (state == STATE_ERROR) {
-    // エラー中は黄点滅
-    if ((nowMs - lastBlinkMillis) >= 120) {
-      lastBlinkMillis = nowMs;
-      static bool on = false;
-      on = !on;
-      if (on) {
-        setRgb(255, 180, 0);  // yellow-ish
-      } else {
-        setRgb(0, 0, 0);
-      }
-    }
-    noTone(PIN_BUZZER);
-    return;
-  }
-
-  setRgb(0, 0, 0);
-  noTone(PIN_BUZZER);
 }
 
 bool handleTimeInput(bool isAlarmInput) {
-  // 入力がないループは処理しない
   if (irCode == 0) {
     return false;
   }
@@ -350,11 +352,33 @@ bool handleTimeInput(bool isAlarmInput) {
   byte cmd = (byte)irCode;
   int digit = decodeDigitFromCommand(cmd);
 
+  if (digit < 0) {
+    digit = decodeDigitFromRaw(lastRawIrCode);
+  }
+
   if (digit >= 0) {
-    // 数字キーは4桁まで受け付け
     if (inputIndex < 4) {
       inputDigits[inputIndex++] = (char)('0' + digit);
       inputDigits[inputIndex] = '\0';
+    }
+    if (inputIndex == 4) {
+      byte hhAuto = (byte)((inputDigits[0] - '0') * 10 + (inputDigits[1] - '0'));
+      byte mmAuto = (byte)((inputDigits[2] - '0') * 10 + (inputDigits[3] - '0'));
+
+      if (hhAuto > 23 || mmAuto > 59) {
+        errorType = 1;
+        return false;
+      }
+
+      if (isAlarmInput) {
+        alarmHH = hhAuto;
+        alarmMM = mmAuto;
+      } else {
+        nowHH = hhAuto;
+        nowMM = mmAuto;
+        lastClockMillis = millis();
+      }
+      return true;
     }
     return false;
   }
@@ -364,9 +388,11 @@ bool handleTimeInput(bool isAlarmInput) {
     return false;
   }
 
+  if (isIgnoredControlCommand(cmd)) {
+    return false;
+  }
+
   if (!isOkCommand(cmd)) {
-    // 数字/クリア/OK以外は不正キー
-    errorType = 3;
     return false;
   }
 
@@ -379,7 +405,6 @@ bool handleTimeInput(bool isAlarmInput) {
   byte mm = (byte)((inputDigits[2] - '0') * 10 + (inputDigits[3] - '0'));
 
   if (hh > 23 || mm > 59) {
-    // 24時間制の範囲外
     errorType = 1;
     return false;
   }
@@ -397,12 +422,10 @@ bool handleTimeInput(bool isAlarmInput) {
 }
 
 bool checkAlarmTrigger() {
-  // 時刻一致しない場合は未発火
   if (nowHH != alarmHH || nowMM != alarmMM) {
     return false;
   }
 
-  // 同一分での再トリガを防止
   int minuteOfDay = nowHH * 60 + nowMM;
   if (minuteOfDay == lastTriggeredMinuteOfDay) {
     return false;
@@ -412,35 +435,78 @@ bool checkAlarmTrigger() {
   return true;
 }
 
+// ★수정됨: 동적 난수 생성
+void generateNewQuiz() {
+  int a = random(1, 10);
+  int b = random(1, 10);
+  int op = random(0, 3); // 0: +, 1: -, 2: *
+
+  if (op == 0) {
+    currentAnswer = a + b;
+    snprintf(currentQuestion, 16, "%d+%d=?", a, b);
+  } else if (op == 1) {
+    // 음수가 나오지 않도록 스왑 처리
+    if (b > a) { 
+      int temp = a; a = b; b = temp; 
+    }
+    currentAnswer = a - b;
+    snprintf(currentQuestion, 16, "%d-%d=?", a, b);
+  } else {
+    currentAnswer = a * b;
+    snprintf(currentQuestion, 16, "%dx%d=?", a, b);
+  }
+}
+
 void startAlarmSequence() {
-  // 出題開始時の内部状態を初期化
   isAlarmRinging = true;
-  quizIndex = 0;
   resetQuizInput();
+  
+  generateNewQuiz(); // 퀴즈 생성
 
   setAlarmToneMode(0);
   setLedColorMode(0);
-
+  
   unsigned long nowMs = millis();
   lastBeepMillis = nowMs;
   lastBlinkMillis = nowMs;
   lastPatternMs = nowMs;
   lastLedPatternMs = nowMs;
+  lastQuizInputMs = nowMs;
 }
 
+// ★수정됨: 정답 즉각 확인 로직으로 개편
 void runQuizStep() {
-  // 入力がないときは何もしない
   if (irCode == 0) {
+    if (quizInputIndex > 0 && (millis() - lastQuizInputMs) >= QUIZ_INPUT_TIMEOUT_MS) {
+      resetQuizInput();
+    }
     return;
   }
 
   byte cmd = (byte)irCode;
   int digit = decodeDigitFromCommand(cmd);
 
+  if (digit < 0) {
+    digit = decodeDigitFromRaw(lastRawIrCode);
+  }
+
   if (digit >= 0) {
+    lastQuizInputMs = millis();
     if (quizInputIndex < 5) {
       quizInput[quizInputIndex++] = (char)('0' + digit);
       quizInput[quizInputIndex] = '\0';
+    }
+    
+    // 입력된 값이 정답과 일치하는지 실시간 확인
+    if (atoi(quizInput) == currentAnswer) {
+      noTone(PIN_BUZZER);
+      tone(PIN_BUZZER, 1600, 120);
+      isAlarmRinging = false;
+      currentState = STATE_IDLE;
+    } 
+    // 입력이 길어졌으나 정답이 아닌 경우 자동 초기화 (정답 최대 2자리 9x9=81)
+    else if (quizInputIndex >= 3) {
+      resetQuizInput();
     }
     return;
   }
@@ -450,49 +516,25 @@ void runQuizStep() {
     return;
   }
 
-  if (isOkCommand(cmd)) {
-    (void)judgeQuizAnswer(irCode);
+  if (isIgnoredControlCommand(cmd)) {
     return;
   }
 
-  errorType = 3;
-}
-
-bool judgeQuizAnswer(unsigned long keyCode) {
-  (void)keyCode;
-
-  // 空回答で確定された場合は不正解扱い
-  if (quizInputIndex == 0) {
-    return false;
-  }
-
-  int userAnswer = atoi(quizInput);
-  int correct = quizTable[quizIndex].answer;
-
-  if (userAnswer == correct) {
-    // 正解時は次の問題へ
-    quizIndex++;
-    resetQuizInput();
-
-    if (quizIndex >= QUIZ_COUNT) {
-      // 全問正解でアラーム停止
+  if (isOkCommand(cmd)) {
+    if (atoi(quizInput) == currentAnswer) {
       noTone(PIN_BUZZER);
       tone(PIN_BUZZER, 1600, 120);
-
       isAlarmRinging = false;
       currentState = STATE_IDLE;
-      return true;
+    } else {
+      resetQuizInput();
     }
-    return true;
+    return;
   }
-
-  return false;
 }
 
 void playErrorBeep(byte errorTypeParam) {
-  // エラー種別ごとに警告音を変更
   int freq = 900;
-
   if (errorTypeParam == 1) {
     freq = 700;
   } else if (errorTypeParam == 2) {
@@ -506,12 +548,10 @@ void playErrorBeep(byte errorTypeParam) {
 }
 
 void setAlarmToneMode(byte mode) {
-  // 音パターンは2種類で循環
   toneMode = mode % 2;
 }
 
 void setLedColorMode(byte colorMode) {
-  // LEDパターンは3種類で循環
   ledMode = colorMode % 3;
 }
 
@@ -521,19 +561,17 @@ void mixAlarmTonePatterns(unsigned long nowMs) {
     return;
   }
 
-  // 一定時間ごとに音色モードを切り替える
   if ((nowMs - lastPatternMs) >= TONE_PATTERN_SWITCH_MS) {
     lastPatternMs = nowMs;
     toneMode = (toneMode + 1) % 2;
   }
 
-  // 200ms周期でON/OFFを繰り返して鳴動を作る
   if ((nowMs - lastBeepMillis) >= BEEP_TOGGLE_MS) {
     lastBeepMillis = nowMs;
     static bool toneOn = false;
     static byte idx = 0;
     toneOn = !toneOn;
-
+    
     if (!toneOn) {
       noTone(PIN_BUZZER);
       return;
@@ -552,14 +590,12 @@ void mixAlarmTonePatterns(unsigned long nowMs) {
 }
 
 void mixLedFlashPatterns(unsigned long nowMs) {
-  // 一定時間ごとに発光パターンを切り替える
   if ((nowMs - lastLedPatternMs) >= LED_PATTERN_SWITCH_MS) {
     lastLedPatternMs = nowMs;
     ledMode = (ledMode + 1) % 3;
   }
 
   static byte step = 0;
-
   if (ledMode == 0) {
     if ((nowMs - lastBlinkMillis) >= 500) {
       lastBlinkMillis = nowMs;
@@ -592,30 +628,55 @@ void mixLedFlashPatterns(unsigned long nowMs) {
 }
 
 int decodeDigitFromCommand(byte cmd) {
-  // IRコマンドを数字へ変換（非数字は-1）
-  if (cmd == IR_CMD_0) return 0;
-  if (cmd == IR_CMD_1) return 1;
-  if (cmd == IR_CMD_2) return 2;
-  if (cmd == IR_CMD_3) return 3;
-  if (cmd == IR_CMD_4) return 4;
-  if (cmd == IR_CMD_5) return 5;
-  if (cmd == IR_CMD_6) return 6;
-  if (cmd == IR_CMD_7) return 7;
-  if (cmd == IR_CMD_8) return 8;
-  if (cmd == IR_CMD_9) return 9;
+  if (cmd == 0x16 || cmd == 0x19) return 0;
+  if (cmd == 0x0C || cmd == 0x45) return 1;
+  if (cmd == 0x18 || cmd == 0x46) return 2;
+  if (cmd == 0x5E || cmd == 0x47) return 3;
+  if (cmd == 0x08 || cmd == 0x44) return 4;
+  if (cmd == 0x1C || cmd == 0x40) return 5;
+  if (cmd == 0x5A || cmd == 0x43) return 6;
+  if (cmd == 0x42 || cmd == 0x07) return 7;
+  if (cmd == 0x52 || cmd == 0x15) return 8;
+  if (cmd == 0x4A || cmd == 0x09) return 9;
+  return -1;
+}
+
+int decodeDigitFromRaw(unsigned long rawCode) {
+  if (rawCode == 0xFF6897UL) return 0;
+  if (rawCode == 0xFF30CFUL) return 1;
+  if (rawCode == 0xFF18E7UL) return 2;
+  if (rawCode == 0xFF7A85UL) return 3;
+  if (rawCode == 0xFF10EFUL) return 4;
+  if (rawCode == 0xFF38C7UL) return 5;
+  if (rawCode == 0xFF5AA5UL) return 6;
+  if (rawCode == 0xFF42BDUL) return 7;
+  if (rawCode == 0xFF4AB5UL) return 8;
+  if (rawCode == 0xFF52ADUL) return 9;
   return -1;
 }
 
 bool isOkCommand(byte cmd) {
-  return cmd == IR_CMD_OK;
+  (void)cmd;
+  return false;
 }
 
 bool isClearCommand(byte cmd) {
   return cmd == IR_CMD_CLEAR;
 }
 
+bool isIgnoredControlCommand(byte cmd) {
+  return cmd == IR_CMD_POWER ||
+         cmd == IR_CMD_VOL_PLUS ||
+         cmd == IR_CMD_VOL_MINUS ||
+         cmd == IR_CMD_PLAY_PAUSE ||
+         cmd == IR_CMD_PREV ||
+         cmd == IR_CMD_NEXT ||
+         cmd == IR_CMD_DOWN ||
+         cmd == IR_CMD_EQ ||
+         cmd == IR_CMD_ST_REPT;
+}
+
 void resetTimeInput() {
-  // HHMM入力バッファを初期化
   inputDigits[0] = '\0';
   inputDigits[1] = '\0';
   inputDigits[2] = '\0';
@@ -625,20 +686,23 @@ void resetTimeInput() {
 }
 
 void resetQuizInput() {
-  // 回答入力バッファを初期化
   quizInput[0] = '\0';
   quizInputIndex = 0;
 }
 
 void setRgb(byte r, byte g, byte b) {
-  // PWMでRGB各色の明るさを設定
-  analogWrite(PIN_LED_R, r);
-  analogWrite(PIN_LED_G, g);
-  analogWrite(PIN_LED_B, b);
+  if (RGB_COMMON_ANODE) {
+    analogWrite(PIN_LED_R, 255 - r);
+    analogWrite(PIN_LED_G, 255 - g);
+    analogWrite(PIN_LED_B, 255 - b);
+  } else {
+    analogWrite(PIN_LED_R, r);
+    analogWrite(PIN_LED_G, g);
+    analogWrite(PIN_LED_B, b);
+  }
 }
 
 void printLcdLine(byte row, const char *text) {
-  // 行全体を16文字で上書きして表示残りを防ぐ
   lcd.setCursor(0, row);
   char out[17];
   memset(out, ' ', 16);
@@ -651,6 +715,56 @@ void printLcdLine(byte row, const char *text) {
 }
 
 void formatTime(char *out, byte hh, byte mm) {
-  // HH:MM 形式へ整形
   sprintf(out, "%02u:%02u", hh, mm);
+}
+
+void runOutputSelfTest() {
+  static bool initialized = false;
+  static unsigned long lastLcdMs = 0;
+  static unsigned long lastLedMs = 0;
+  static unsigned long lastToneMs = 0;
+  static byte ledStep = 0;
+  static byte toneStep = 0;
+
+  unsigned long nowMs = millis();
+
+  if (!initialized) {
+    initialized = true;
+    lcd.clear();
+    printLcdLine(0, "SELF TEST MODE");
+    printLcdLine(1, "RGB+BUZZER TEST");
+    setRgb(255, 0, 0);
+    tone(PIN_BUZZER, 880);
+    lastLcdMs = nowMs;
+    lastLedMs = nowMs;
+    lastToneMs = nowMs;
+    return;
+  }
+
+  if ((nowMs - lastLcdMs) >= 300) {
+    lastLcdMs = nowMs;
+    char line2[17];
+    if (ledStep == 0) snprintf(line2, 17, "LED:RED");
+    if (ledStep == 1) snprintf(line2, 17, "LED:GREEN");
+    if (ledStep == 2) snprintf(line2, 17, "LED:BLUE");
+    if (ledStep == 3) snprintf(line2, 17, "LED:WHITE");
+    printLcdLine(0, "SELF TEST MODE");
+    printLcdLine(1, line2);
+  }
+
+  if ((nowMs - lastLedMs) >= 1000) {
+    lastLedMs = nowMs;
+    ledStep = (ledStep + 1) % 4;
+    if (ledStep == 0) setRgb(255, 0, 0);
+    if (ledStep == 1) setRgb(0, 255, 0);
+    if (ledStep == 2) setRgb(0, 0, 255);
+    if (ledStep == 3) setRgb(255, 255, 255);
+  }
+
+  if ((nowMs - lastToneMs) >= 200) {
+    lastToneMs = nowMs;
+    toneStep = (toneStep + 1) % 4;
+    const int tones[4] = {880, 988, 1175, 1319};
+    tone(PIN_BUZZER, tones[toneStep]);
+  }
 }
