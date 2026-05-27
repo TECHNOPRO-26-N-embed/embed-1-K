@@ -1,236 +1,290 @@
 #include <Arduino.h>
-#include <TM1637Display.h>
 
-// ==============================
-// ピン定義
-// ==============================
-const uint8_t PIN_TRIG = 9;       // HC-SR04 Trig
-const uint8_t PIN_ECHO = 10;      // HC-SR04 Echo
-const uint8_t PIN_BUZZER = 6;     // パッシブブザー
-const uint8_t PIN_TM1637_CLK = 4; // TM1637 CLK
-const uint8_t PIN_TM1637_DIO = 5; // TM1637 DIO
+// =====================================================
+// test_04_sensor_buzzer_74hc595_display.ino
+// 目的: HC-SR04 + ブザー + 4桁7セグ(74HC595 x1) の統合確認
+//
+// 構成:
+// - 74HC595は「セグメント(a,b,c,d,e,f,g,dp)」のみ担当
+// - 桁選択(DIG1～DIG4)はArduinoのGPIOで直接制御
+// - 4桁を高速で順番に点灯するダイナミック点灯方式
+//
+// 競合しないピン割り当て:
+// - 74HC595: D8, D9, D10
+// - 4桁選択: D2, D3, D4, D5
+// - ブザー: D6
+<<<<<<< HEAD
+// - LED: D7
+=======
+>>>>>>> 9518da998d04755cdcb0666a04acb8b573d76891
+// - HC-SR04: D11(Trig), D12(Echo)
+// =====================================================
 
-// ==============================
-// 状態管理
-// ==============================
-const uint8_t STATE_WAIT = 0;   // 待機中
-const uint8_t STATE_JUDGE = 1;  // 距離判定中
-const uint8_t STATE_NOTIFY = 2; // 通知中
-const uint8_t STATE_ERROR = 3;  // 異常監視
+// -----------------------------------------------------
+// 74HC595配線（Elegooサンプルに合わせる）
+// -----------------------------------------------------
+const uint8_t PIN_595_LATCH = 9;  // STCP: 出力反映タイミング制御（ラッチ）
+const uint8_t PIN_595_CLOCK = 10; // SHCP: シフトクロック
+const uint8_t PIN_595_DATA = 8;   // DS: シリアルデータ入力
 
-uint8_t currentState = STATE_WAIT;
-uint8_t distanceZone = 2; // 0:近 1:中 2:遠
+// -----------------------------------------------------
+// 桁選択ピン（4桁）
+// -----------------------------------------------------
+const uint8_t PIN_DIGIT_1 = 2;
+const uint8_t PIN_DIGIT_2 = 3;
+const uint8_t PIN_DIGIT_3 = 4;
+const uint8_t PIN_DIGIT_4 = 5;
+const uint8_t DIGIT_PINS[4] = {PIN_DIGIT_1, PIN_DIGIT_2, PIN_DIGIT_3, PIN_DIGIT_4};
 
-// ==============================
-// タイマー管理(millis用)
-// ==============================
+// -----------------------------------------------------
+// ブザー + HC-SR04（表示系と競合しないピン）
+// -----------------------------------------------------
+const uint8_t PIN_BUZZER = 6;
+<<<<<<< HEAD
+const uint8_t PIN_LED = 7;
+=======
+>>>>>>> 9518da998d04755cdcb0666a04acb8b573d76891
+const uint8_t PIN_TRIG = 11;
+const uint8_t PIN_ECHO = 12;
+
+// -----------------------------------------------------
+// 7セグ数字テーブル（0～F + 消灯）
+// bit0=a, bit1=b, ... bit6=g, bit7=dp
+// ここでは Elegoo 形式（共通カソード向け: 1で点灯）を基準にする
+// -----------------------------------------------------
+const uint8_t SEG_TABLE[17] = {
+  0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07,
+  0x7f, 0x6f, 0x77, 0x7c, 0x39, 0x5e, 0x79, 0x71, 0x00
+};
+
+// セグメント信号極性:
+// - 共通カソード: true（1=点灯）
+// - 共通アノード: false（0=点灯）
+const bool SEG_ACTIVE_HIGH = true;
+
+// -----------------------------------------------------
+// 距離しきい値(mm)
+// -----------------------------------------------------
+const int NEAR_THRESHOLD_MM = 100;
+const int MID_THRESHOLD_MM = 300;
+
+// -----------------------------------------------------
+// ブザー周波数
+// -----------------------------------------------------
+const int FREQ_NEAR = 2200;
+const int FREQ_MID = 1500;
+const int FREQ_FAR = 900;
+
+// -----------------------------------------------------
+// タイミング設定
+// -----------------------------------------------------
+const unsigned long MEASURE_INTERVAL_MS = 100;
+const unsigned long DISPLAY_SCAN_INTERVAL_MS = 2;
+const unsigned long DISPLAY_VALUE_UPDATE_MS = 300;
+const unsigned long MID_BEEP_INTERVAL_MS = 100;
+const unsigned long FAR_BEEP_ON_MS = 100;
+const unsigned long FAR_BEEP_OFF_MS = 900;
+const unsigned long ECHO_TIMEOUT_US = 12000UL;
+
+<<<<<<< HEAD
+// LED点滅周期(ms)
+// 近距離ほど速く点滅し、危険度を視覚的に伝える
+const unsigned long LED_BLINK_NEAR_MS = 80;
+const unsigned long LED_BLINK_MID_MS = 250;
+const unsigned long LED_BLINK_FAR_MS = 700;
+
+=======
+>>>>>>> 9518da998d04755cdcb0666a04acb8b573d76891
+// 1桁あたりの点灯時間(us)。短くすると暗くなる
+const unsigned int DIGIT_ON_TIME_US = 500;
+
+// 桁選択極性:
+// - 共通カソード4桁モジュール想定: LOWで桁有効
+// - 共通アノードの場合は false へ変更して試験
+const bool DIGIT_ACTIVE_LOW = true;
+
+// -----------------------------------------------------
+// 状態変数
+// -----------------------------------------------------
+int distanceMm = 0;
+bool buzzerOn = false;
+<<<<<<< HEAD
+bool ledOn = false;
+=======
+>>>>>>> 9518da998d04755cdcb0666a04acb8b573d76891
+uint8_t displayDigits[4] = {0, 0, 0, 0};
+uint8_t currentScanDigit = 0;
+
 unsigned long lastMeasureMillis = 0;
+unsigned long lastDisplayScanMillis = 0;
+unsigned long lastDisplayValueUpdateMillis = 0;
 unsigned long lastBeepToggleMillis = 0;
-
-// ==============================
-// センサー値・出力状態
-// ==============================
-int distanceMm = 0;          // 現在の距離(mm)
-int prevValidDistanceMm = 0; // 直前の有効距離(mm)
-bool buzzerOn = false;       // ブザーが鳴っているかどうか
-
-// ==============================
-// しきい値・周期設定
-// ==============================
-const int nearThresholdMm = 100; // 近距離しきい値
-const int midThresholdMm = 300;  // 中距離しきい値
-const int HYSTERESIS_MM = 20;    // ヒステリシス幅
-
-const unsigned long MEASURE_INTERVAL_MS = 100;    // 距離計測周期
-const unsigned long MID_BEEP_INTERVAL_MS = 100;   // 中距離時ON/OFF周期
-const unsigned long FAR_BEEP_ON_MS = 100;         // 遠距離時の短音ON時間
-const unsigned long FAR_BEEP_OFF_MS = 900;        // 遠距離時の無音時間
-const unsigned long ECHO_TIMEOUT_US = 25000UL;    // Echo待ちタイムアウト(約4m相当)
-
-const int BUZZER_FREQ_NEAR = 2200; // 近距離の高音周波数
-const int BUZZER_FREQ_MID = 1500;  // 中距離の中音周波数
-const int BUZZER_FREQ_FAR = 900;   // 遠距離の低音周波数
-
-TM1637Display display(PIN_TM1637_CLK, PIN_TM1637_DIO);
+<<<<<<< HEAD
+unsigned long lastLedToggleMillis = 0;
+=======
+>>>>>>> 9518da998d04755cdcb0666a04acb8b573d76891
 
 int readDistanceMm();
-uint8_t classifyDistanceZone(int measuredDistanceMm);
-void updateBuzzerOutput(uint8_t zone);
-void updateDisplayOutput(int measuredDistanceMm);
+uint8_t classifyZone(int measuredMm);
+void outputBuzzerByZone(uint8_t zone);
+<<<<<<< HEAD
+void outputLedByZone(uint8_t zone);
+=======
+>>>>>>> 9518da998d04755cdcb0666a04acb8b573d76891
+void convertNumberToDigits(int valueMm);
+void updateDisplayScan();
+void writeShiftRegister(uint8_t seg);
+void setAllDigitsOff();
+uint8_t mapDigitToSegment(uint8_t digit);
 
 void setup() {
-  // センサーピンの入出力設定
+  // --- 74HC595制御ピン初期化 ---
+  pinMode(PIN_595_LATCH, OUTPUT);
+  pinMode(PIN_595_CLOCK, OUTPUT);
+  pinMode(PIN_595_DATA, OUTPUT);
+
+  // --- 4桁選択ピン初期化 ---
+  for (uint8_t i = 0; i < 4; i++) {
+    pinMode(DIGIT_PINS[i], OUTPUT);
+  }
+  setAllDigitsOff();
+
+  // --- センサー初期化 ---
   pinMode(PIN_TRIG, OUTPUT);
   pinMode(PIN_ECHO, INPUT);
 
-  // ブザー出力ピンを初期化
+  // --- ブザー初期化 ---
   pinMode(PIN_BUZZER, OUTPUT);
   noTone(PIN_BUZZER);
 
-  // TM1637表示器の初期化(明るさ設定と初期表示)
-  display.setBrightness(0x0f);
-  display.showNumberDec(0, true);
+<<<<<<< HEAD
+  // --- LED初期化 ---
+  pinMode(PIN_LED, OUTPUT);
+  digitalWrite(PIN_LED, LOW);
 
-  // 状態変数を初期化
-  currentState = STATE_WAIT;
-  distanceZone = 2; // 遠距離スタート
-  distanceMm = 0;
-  prevValidDistanceMm = 0;
-  buzzerOn = false;
+=======
+>>>>>>> 9518da998d04755cdcb0666a04acb8b573d76891
+  // 起動確認:
+  // 1) 全桁を有効化
+  // 2) 7セグ全点灯パターンを出力
+  // 配線抜けの一次確認に使う
+  writeShiftRegister(mapDigitToSegment(8));
+  for (uint8_t i = 0; i < 4; i++) {
+    digitalWrite(DIGIT_PINS[i], DIGIT_ACTIVE_LOW ? LOW : HIGH);
+  }
+  delay(500);
 
-  // 起動直後の時刻基準を揃える
+  // 起動確認終了後、全消灯して通常ループへ
+  setAllDigitsOff();
+  writeShiftRegister(mapDigitToSegment(16));
+
+  // 各タイマの基準時刻を揃える
   lastMeasureMillis = millis();
+  lastDisplayScanMillis = millis();
+  lastDisplayValueUpdateMillis = millis();
   lastBeepToggleMillis = millis();
+<<<<<<< HEAD
+  lastLedToggleMillis = millis();
+=======
+>>>>>>> 9518da998d04755cdcb0666a04acb8b573d76891
+
+  // 起動直後の表示値を初期化
+  convertNumberToDigits(distanceMm);
 }
 
 void loop() {
-  // 毎ループ現在時刻を取得し、各周期判定に使う
   unsigned long now = millis();
 
-  // 状態ごとの処理を行う
-  if (currentState == STATE_WAIT) {
-    // 計測周期に達したときだけセンサーを読む
-    if (now - lastMeasureMillis >= MEASURE_INTERVAL_MS) {
-      lastMeasureMillis = now;
-      int measured = readDistanceMm();
+  // 一定周期で距離を測定
+  if (now - lastMeasureMillis >= MEASURE_INTERVAL_MS) {
+    lastMeasureMillis = now;
 
-      // 有効距離が取得できたら判定状態へ進む
-      if (measured > 0) {
-        distanceMm = measured;
-        currentState = STATE_JUDGE;
-      } else {
-        // 異常値はエラー監視へ遷移
-        currentState = STATE_ERROR;
-      }
+    // センサー値が有効なら更新（タイムアウト時は前回値を保持）
+    int measured = readDistanceMm();
+    if (measured > 0) {
+      distanceMm = measured;
     }
-  } else if (currentState == STATE_JUDGE) {
-    // 取得済み距離を近/中/遠に分類
-    uint8_t zone = classifyDistanceZone(distanceMm);
 
-    // 正常なら通知状態へ進む
-    distanceZone = zone;
-    currentState = STATE_NOTIFY;
-  } else if (currentState == STATE_NOTIFY) {
-    // 距離区分に応じたブザー出力を更新
-    updateBuzzerOutput(distanceZone);
+  }
 
-    // 数値表示を最新距離に更新
-    updateDisplayOutput(distanceMm);
+  // 表示値の更新間隔をあけて、数値の変化を見やすくする
+  if (now - lastDisplayValueUpdateMillis >= DISPLAY_VALUE_UPDATE_MS) {
+    lastDisplayValueUpdateMillis = now;
+    convertNumberToDigits(distanceMm);
+  }
 
-    // 次周期は再判定するため判定状態へ戻る
-    currentState = STATE_JUDGE;
-  } else if (currentState == STATE_ERROR) {
-    // 異常中は誤通知を避けるためブザー停止
-    noTone(PIN_BUZZER);
-    buzzerOn = false;
+  // 距離ゾーンに応じてブザー出力を更新
+  uint8_t zone = classifyZone(distanceMm);
+  outputBuzzerByZone(zone);
+<<<<<<< HEAD
+  outputLedByZone(zone);
+=======
+>>>>>>> 9518da998d04755cdcb0666a04acb8b573d76891
 
-    // 表示は前回有効値を維持して挙動を安定化
-    updateDisplayOutput(prevValidDistanceMm);
-
-    // 次周期で再計測し、復帰可否を判定する
-    if (now - lastMeasureMillis >= MEASURE_INTERVAL_MS) {
-      lastMeasureMillis = now;
-      int measured = readDistanceMm();
-      if (measured > 0) {
-        distanceMm = measured;
-        currentState = STATE_JUDGE;
-      }
-    }
-  } else {
-    // 想定外状態が来たら安全側として待機に戻す
-    noTone(PIN_BUZZER);
-    buzzerOn = false;
-    currentState = STATE_WAIT;
+  // ダイナミック点灯: 周期的に次の桁へ進める
+  if (now - lastDisplayScanMillis >= DISPLAY_SCAN_INTERVAL_MS) {
+    lastDisplayScanMillis = now;
+    updateDisplayScan();
   }
 }
 
 int readDistanceMm() {
-  // TrigをLOWにしてパルス生成前の状態を安定化
+  // HC-SR04のTrigを10usパルス駆動して測距開始
   digitalWrite(PIN_TRIG, LOW);
   delayMicroseconds(2);
 
-  // Trigに10usのHIGHパルスを出して測距開始
   digitalWrite(PIN_TRIG, HIGH);
   delayMicroseconds(10);
   digitalWrite(PIN_TRIG, LOW);
 
-  // EchoのHIGH幅を取得(タイムアウト付き)
+  // Echoパルス幅を取得（timeoutで0が返る）
   unsigned long durationUs = pulseIn(PIN_ECHO, HIGH, ECHO_TIMEOUT_US);
-
-  // タイムアウト時は異常値として0を返す
   if (durationUs == 0) {
     return 0;
   }
 
-  // 音速換算でmmに変換: distance(mm) = duration(us) * 0.1715
+  // 音速からmm換算: distance(mm) ≒ duration(us) * 0.1715
   long measuredMm = (long)(durationUs * 1715L) / 10000L;
 
-  // センサー有効範囲外は異常値として0を返す
+  // 実運用範囲外は無効値扱い
   if (measuredMm < 1 || measuredMm > 4000) {
     return 0;
   }
 
-  // 有効値なら現在値と前回有効値を更新
-  distanceMm = (int)measuredMm;
-  prevValidDistanceMm = distanceMm;
-  return distanceMm;
+  return (int)measuredMm;
 }
 
-uint8_t classifyDistanceZone(int measuredDistanceMm) {
-  // 異常値入力時は前回ゾーンを維持して急変を防ぐ
-  if (measuredDistanceMm < 1 || measuredDistanceMm > 4000) {
-    return distanceZone;
+uint8_t classifyZone(int measuredMm) {
+  // zone 0: 近距離, zone 1: 中距離, zone 2: 遠距離/無効
+  if (measuredMm <= 0) {
+    return 2;
   }
-
-  // 現在ゾーンに応じてヒステリシス付き判定を行う
-  if (distanceZone == 0) {
-    // 近 -> 中へ遷移するには上側境界を超える必要がある
-    if (measuredDistanceMm > nearThresholdMm + HYSTERESIS_MM) {
-      return 1;
-    }
+  if (measuredMm <= NEAR_THRESHOLD_MM) {
     return 0;
   }
-
-  if (distanceZone == 1) {
-    // 中 -> 近へ遷移するには下側境界より小さい必要がある
-    if (measuredDistanceMm <= nearThresholdMm - HYSTERESIS_MM) {
-      return 0;
-    }
-
-    // 中 -> 遠へ遷移するには上側境界を超える必要がある
-    if (measuredDistanceMm > midThresholdMm + HYSTERESIS_MM) {
-      return 2;
-    }
-
-    return 1;
-  }
-
-  // distanceZone == 2(遠)想定
-  // 遠 -> 中へ遷移するには下側境界まで戻る必要がある
-  if (measuredDistanceMm <= midThresholdMm - HYSTERESIS_MM) {
+  if (measuredMm <= MID_THRESHOLD_MM) {
     return 1;
   }
   return 2;
 }
 
-void updateBuzzerOutput(uint8_t zone) {
+void outputBuzzerByZone(uint8_t zone) {
   unsigned long now = millis();
 
   if (zone == 0) {
-    // 近距離: 高音を連続で鳴らし続ける
-    tone(PIN_BUZZER, BUZZER_FREQ_NEAR);
+    // 近距離: 連続高音
+    tone(PIN_BUZZER, FREQ_NEAR);
     buzzerOn = true;
     return;
   }
 
   if (zone == 1) {
-    // 中距離: 100msごとにON/OFFを切り替える断続音
+    // 中距離: 100ms周期でON/OFF
     if (now - lastBeepToggleMillis >= MID_BEEP_INTERVAL_MS) {
       lastBeepToggleMillis = now;
       buzzerOn = !buzzerOn;
-
       if (buzzerOn) {
-        tone(PIN_BUZZER, BUZZER_FREQ_MID);
+        tone(PIN_BUZZER, FREQ_MID);
       } else {
         noTone(PIN_BUZZER);
       }
@@ -238,35 +292,103 @@ void updateBuzzerOutput(uint8_t zone) {
     return;
   }
 
-  if (zone == 2) {
-    // 遠距離: 短く鳴らして長めに止めることで低頻度通知にする
-    unsigned long interval = buzzerOn ? FAR_BEEP_ON_MS : FAR_BEEP_OFF_MS;
-    if (now - lastBeepToggleMillis >= interval) {
-      lastBeepToggleMillis = now;
-      buzzerOn = !buzzerOn;
-
-      if (buzzerOn) {
-        tone(PIN_BUZZER, BUZZER_FREQ_FAR);
-      } else {
-        noTone(PIN_BUZZER);
-      }
+  // 遠距離: 短音 + 長め無音
+  unsigned long interval = buzzerOn ? FAR_BEEP_ON_MS : FAR_BEEP_OFF_MS;
+  if (now - lastBeepToggleMillis >= interval) {
+    lastBeepToggleMillis = now;
+    buzzerOn = !buzzerOn;
+    if (buzzerOn) {
+      tone(PIN_BUZZER, FREQ_FAR);
+    } else {
+      noTone(PIN_BUZZER);
     }
-    return;
   }
-
-  // 不正zoneは安全側として停止
-  noTone(PIN_BUZZER);
-  buzzerOn = false;
 }
 
-void updateDisplayOutput(int measuredDistanceMm) {
-  // 表示範囲外を防ぐため0～9999に丸める
-  if (measuredDistanceMm < 0) {
-    measuredDistanceMm = 0;
-  } else if (measuredDistanceMm > 9999) {
-    measuredDistanceMm = 9999;
+<<<<<<< HEAD
+void outputLedByZone(uint8_t zone) {
+  unsigned long now = millis();
+  unsigned long interval = LED_BLINK_FAR_MS;
+
+  if (zone == 0) {
+    interval = LED_BLINK_NEAR_MS;
+  } else if (zone == 1) {
+    interval = LED_BLINK_MID_MS;
   }
 
-  // 4桁表示(先頭ゼロ埋めあり)で距離を表示
-  display.showNumberDec(measuredDistanceMm, true);
+  // ノンブロッキングで点滅更新
+  if (now - lastLedToggleMillis >= interval) {
+    lastLedToggleMillis = now;
+    ledOn = !ledOn;
+    digitalWrite(PIN_LED, ledOn ? HIGH : LOW);
+  }
+}
+
+=======
+>>>>>>> 9518da998d04755cdcb0666a04acb8b573d76891
+void convertNumberToDigits(int valueMm) {
+  // 表示可能範囲へ丸める
+  if (valueMm < 0) {
+    valueMm = 0;
+  } else if (valueMm > 9999) {
+    valueMm = 9999;
+  }
+
+  // 千/百/十/一の位に分解
+  displayDigits[0] = (uint8_t)(valueMm / 1000);
+  displayDigits[1] = (uint8_t)((valueMm / 100) % 10);
+  displayDigits[2] = (uint8_t)((valueMm / 10) % 10);
+  displayDigits[3] = (uint8_t)(valueMm % 10);
+}
+
+void updateDisplayScan() {
+  // ゴースト点灯を避けるため、先に全桁OFF
+  setAllDigitsOff();
+
+  // 現在桁に対応する数字パターンを74HC595へ送信
+  uint8_t digitValue = displayDigits[currentScanDigit];
+  writeShiftRegister(mapDigitToSegment(digitValue));
+
+  // 対象桁だけ有効化
+  digitalWrite(
+    DIGIT_PINS[currentScanDigit],
+    DIGIT_ACTIVE_LOW ? LOW : HIGH
+  );
+
+  // 疑似PWM: 点灯時間を短くして見た目の明るさを下げる
+  delayMicroseconds(DIGIT_ON_TIME_US);
+  setAllDigitsOff();
+
+  // 次回は次の桁へ
+  currentScanDigit++;
+  if (currentScanDigit >= 4) {
+    currentScanDigit = 0;
+  }
+}
+
+void writeShiftRegister(uint8_t seg) {
+  // ラッチLOW中に1byteシフトし、ラッチHIGHで出力確定
+  digitalWrite(PIN_595_LATCH, LOW);
+  shiftOut(PIN_595_DATA, PIN_595_CLOCK, MSBFIRST, seg);
+  digitalWrite(PIN_595_LATCH, HIGH);
+}
+
+void setAllDigitsOff() {
+  // 桁有効極性に合わせて全桁OFFへ
+  for (uint8_t i = 0; i < 4; i++) {
+    digitalWrite(DIGIT_PINS[i], DIGIT_ACTIVE_LOW ? HIGH : LOW);
+  }
+}
+
+uint8_t mapDigitToSegment(uint8_t digit) {
+  // digit: 0～15は数字/16進、16は消灯
+  uint8_t index = (digit <= 16) ? digit : 16;
+  uint8_t pattern = SEG_TABLE[index];
+
+  // 共通アノードの場合はON/OFF極性が逆なので反転
+  if (!SEG_ACTIVE_HIGH) {
+    pattern = (uint8_t)~pattern;
+  }
+
+  return pattern;
 }
