@@ -1,5 +1,5 @@
 #define IR_USE_AVR_TIMER1
-#include <Arduino.h>
+/#include <Arduino.h>
 #include <LiquidCrystal.h>
 #include <IRremote.hpp>
 
@@ -27,9 +27,11 @@ const bool ENABLE_REMOTE_INPUT = true;
 const bool REMOTE_DEBUG_PRINT = true;
 
 <<<<<<< HEAD
-// ★수정됨: 소등 시 켜진다면 사용 중인 LED가 공통 캐소드 방식이므로 false로 변경
+=======
+<<<<<<< HEAD
 =======
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
 const bool RGB_COMMON_ANODE = false;
 
 // アプリ全体の状態遷移
@@ -60,8 +62,7 @@ const unsigned long DEBOUNCE_DELAY_MS = 50;
 const unsigned long CLOCK_STEP_MS = 60000;
 const unsigned long LCD_UPDATE_MS = 150;
 const unsigned long IDLE_BLINK_MS = 500;
-const unsigned long BEEP_TOGGLE_MS = 200;
-const unsigned long TONE_PATTERN_SWITCH_MS = 3000;
+const unsigned long TONE_PATTERN_SWITCH_MS = 10000;
 const unsigned long LED_PATTERN_SWITCH_MS = 1000;
 const unsigned long QUIZ_INPUT_TIMEOUT_MS = 5000;
 
@@ -75,9 +76,11 @@ byte inputIndex = 0;
 bool isAlarmInputPhase = false;
 
 <<<<<<< HEAD
-// ★수정됨: 동적 퀴즈용 변수
+=======
+<<<<<<< HEAD
 =======
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
 char currentQuestion[16] = {'\0'};
 int currentAnswer = 0;
 
@@ -153,10 +156,14 @@ void setup() {
 
   Serial.begin(9600);
 <<<<<<< HEAD
-  randomSeed(analogRead(A0)); // 난수 시드 초기화
+  randomSeed(analogRead(A0));
+=======
+<<<<<<< HEAD
+  randomSeed(analogRead(A0));
 =======
   randomSeed(analogRead(A0));
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
 
   if (ENABLE_REMOTE_INPUT) {
     IrReceiver.begin(PIN_IR, DISABLE_LED_FEEDBACK);
@@ -446,9 +453,11 @@ bool checkAlarmTrigger() {
 }
 
 <<<<<<< HEAD
-// ★수정됨: 동적 난수 생성
+=======
+<<<<<<< HEAD
 =======
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
 void generateNewQuiz() {
   int a = random(1, 10);
   int b = random(1, 10);
@@ -459,9 +468,11 @@ void generateNewQuiz() {
     snprintf(currentQuestion, 16, "%d+%d=?", a, b);
   } else if (op == 1) {
 <<<<<<< HEAD
-    // 음수가 나오지 않도록 스왑 처리
+=======
+<<<<<<< HEAD
 =======
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
     if (b > a) { 
       int temp = a; a = b; b = temp; 
     }
@@ -478,10 +489,14 @@ void startAlarmSequence() {
   resetQuizInput();
   
 <<<<<<< HEAD
-  generateNewQuiz(); // 퀴즈 생성
+  generateNewQuiz();
+=======
+<<<<<<< HEAD
+  generateNewQuiz();
 =======
   generateNewQuiz();
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
 
   setAlarmToneMode(0);
   setLedColorMode(0);
@@ -495,9 +510,11 @@ void startAlarmSequence() {
 }
 
 <<<<<<< HEAD
-// ★수정됨: 정답 즉각 확인 로직으로 개편
+=======
+<<<<<<< HEAD
 =======
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
 void runQuizStep() {
   if (irCode == 0) {
     if (quizInputIndex > 0 && (millis() - lastQuizInputMs) >= QUIZ_INPUT_TIMEOUT_MS) {
@@ -521,9 +538,11 @@ void runQuizStep() {
     }
     
 <<<<<<< HEAD
-    // 입력된 값이 정답과 일치하는지 실시간 확인
+=======
+<<<<<<< HEAD
 =======
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
     if (atoi(quizInput) == currentAnswer) {
       noTone(PIN_BUZZER);
       tone(PIN_BUZZER, 1600, 120);
@@ -531,9 +550,11 @@ void runQuizStep() {
       currentState = STATE_IDLE;
     } 
 <<<<<<< HEAD
-    // 입력이 길어졌으나 정답이 아닌 경우 자동 초기화 (정답 최대 2자리 9x9=81)
+=======
+<<<<<<< HEAD
 =======
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
     else if (quizInputIndex >= 3) {
       resetQuizInput();
     }
@@ -590,30 +611,60 @@ void mixAlarmTonePatterns(unsigned long nowMs) {
     return;
   }
 
+  // パターンA: マリオ風8bitメロディ（著作権配慮で完全一致は避けたアレンジ）
+  static const uint16_t melodyAHz[] = {
+    659, 659, 659, 523, 659, 784, 392,
+    523, 392, 330, 440, 494, 466, 440,
+    392, 659, 784, 880, 698, 784, 659,
+    523, 587, 494
+  };
+  static const uint16_t melodyADur[] = {
+    180, 180, 220, 180, 220, 300, 300,
+    260, 240, 260, 220, 220, 180, 220,
+    180, 180, 220, 260, 220, 220, 220,
+    220, 220, 320
+  };
+
+  // パターンB: サイレン（高低を往復）
+  static const uint16_t melodyBHz[] = {
+    880, 988, 1109, 1319, 1109, 988, 880, 740,
+    988, 1175, 1397, 1175, 988, 784, 988, 1319
+  };
+  static const uint16_t melodyBDur[] = {
+    160, 160, 160, 180, 160, 160, 160, 180,
+    160, 160, 180, 160, 160, 180, 160, 220
+  };
+
+  const uint16_t *activeMelodyHz = (toneMode == 0) ? melodyAHz : melodyBHz;
+  const uint16_t *activeMelodyDur = (toneMode == 0) ? melodyADur : melodyBDur;
+  const byte activeLen = (toneMode == 0)
+                           ? (byte)(sizeof(melodyAHz) / sizeof(melodyAHz[0]))
+                           : (byte)(sizeof(melodyBHz) / sizeof(melodyBHz[0]));
+
+  static byte noteIndex = 0;
+
   if ((nowMs - lastPatternMs) >= TONE_PATTERN_SWITCH_MS) {
     lastPatternMs = nowMs;
     toneMode = (toneMode + 1) % 2;
+    noteIndex = 0;
+    noTone(PIN_BUZZER);
+    lastBeepMillis = nowMs;
+    return;
   }
 
-  if ((nowMs - lastBeepMillis) >= BEEP_TOGGLE_MS) {
+  if ((nowMs - lastBeepMillis) >= activeMelodyDur[noteIndex]) {
     lastBeepMillis = nowMs;
-    static bool toneOn = false;
-    static byte idx = 0;
-    toneOn = !toneOn;
-    
-    if (!toneOn) {
-      noTone(PIN_BUZZER);
-      return;
-    }
 
-    if (toneMode == 0) {
-      const int seq0[] = {880, 988, 1047, 1175};
-      tone(PIN_BUZZER, seq0[idx % 4]);
-      idx++;
-    } else {
-      const int seq1[] = {1319, 988, 740, 988};
-      tone(PIN_BUZZER, seq1[idx % 4]);
-      idx++;
+    // 休符を短くして体感音量を上げる
+    uint16_t playMs = activeMelodyDur[noteIndex];
+    if (playMs > 10) {
+      playMs -= 10;
+    }
+    tone(PIN_BUZZER, activeMelodyHz[noteIndex], playMs);
+
+    noteIndex++;
+    if (noteIndex >= activeLen) {
+      noteIndex = 0;
     }
   }
 }
