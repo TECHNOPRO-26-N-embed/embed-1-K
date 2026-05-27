@@ -58,6 +58,7 @@
   lastStateMonitorMillis     : unsigned long = 0
   errorRetryStartMillis      : unsigned long = 0
   stateEnterMillis           : unsigned long = 0
+  readStartMillis            : unsigned long = 0
   passwordInputStartMillis   : unsigned long = 0
 
   CARD_CHECK_INTERVAL_MS        : const unsigned long = 200
@@ -74,12 +75,14 @@
   displayMessage    : char[17] = ""
   passwordBuffer    : char[9]  = ""
   isICDetected      : bool = false
+  isReadInProgress  : bool = false
 
 【その他のフラグ・カウンター】
   judgeResult       : bool = false
   errorFlag         : bool = false
   errorCode         : int = 0
   retryCount        : uint8_t = 0
+  MAX_RETRY_COUNT   : const uint8_t = 3
   passwordFailCount : uint8_t = 0
   isLocked          : bool = false
   lockStartMillis   : unsigned long = 0
@@ -161,20 +164,29 @@
 ＜currentState が STATE_WAIT（待機）のとき＞
 - readICCard() を周期監視で実行する。
 - 読み取り成功なら STATE_JUDGE へ遷移する。
-- 1.5秒未検出なら STATE_TIMEOUT へ遷移する。
+- 待機中（isReadInProgress == false）はタイムアウト遷移しない。
+- カード検出後に読み取り開始した場合のみ、now - readStartMillis >= 1500ms で STATE_TIMEOUT へ遷移する。
+
+＜default分岐（不正状態値時）＞
+ - どの状態にも該当しない場合は currentState = STATE_ERROR に遷移し、次ループで必ず STATE_WAIT へ復帰する。
 
 ＜currentState が STATE_JUDGE（真偽判定）のとき＞
 - judgeICData(rfidData) を実行する。
-- 判定成功なら STATE_RESULT、失敗なら STATE_ERROR へ遷移する。
+- 判定成功なら STATE_RESULT、失敗なら errorRetryStartMillis = now, stateEnterMillis = now を記録して STATE_ERROR へ遷移する。
 
 ＜currentState が STATE_RESULT（結果出力）のとき＞
 - displayToLCD() で結果を表示する。
 - controlBuzzer(judgeResult) で結果音を開始する。
 - 出力完了後に STATE_WAIT へ戻る。
 
+＜状態遷移時の共通処理＞
+ - いずれかの状態へ遷移するたびに stateEnterMillis = now を必ず更新する。
+
 ＜currentState が STATE_ERROR（エラー）のとき＞
 - handleError(errorCode) を実行する。
-- リトライ条件を満たす場合は再試行、終了条件で STATE_WAIT へ戻る。
+- retryCount < MAX_RETRY_COUNT かつ now - errorRetryStartMillis >= ERROR_RETRY_INTERVAL_MS の場合、retryCount を加算して STATE_WAIT へ遷移する（再試行先は常に STATE_WAIT）。
+- retryCount >= MAX_RETRY_COUNT の場合、強制的に STATE_WAIT へ遷移する。
+- STATE_WAIT 復帰時は errorFlag=false, errorCode=0, isReadInProgress=false, soundPattern=0 を初期化する。
 
 ＜currentState が STATE_TIMEOUT（タイムアウト）のとき＞
 - displayToLCD("NO CARD") を表示する。
@@ -195,12 +207,17 @@
 ```
 【処理の流れ】
 1. カードの有無を確認する。
-2. カードがある場合、データ読み取りを実行する。
-3. 成功時は rfidData に格納して true を返す。
-4. 失敗時は errorCode を更新して false を返す。
+2. カードを検出した時点で isReadInProgress = true、readStartMillis = now を設定する。
+3. データ読み取りを実行する。
+4. 成功時は rfidData に格納し、isReadInProgress = false にして true を返す。
+5. 読み取り処理中に now - readStartMillis が 1500ms を超えたら false を返し、STATE_TIMEOUT 遷移条件を満たす。
+6. 読み取り失敗時は errorCode を更新して false を返す。
+
+【補足】
+- 戻り値 false の場合、errorCode の値で「未検出（0）」と「読取失敗（1）」を区別する。未検出時は状態遷移しない。
 
 【エラー・異常ケース】
-- カード未検出: false を返して待機継続。
+- カード未検出（読み取り未開始）: false を返して待機継続（タイムアウトしない）。
 ```
 
 ---
@@ -299,11 +316,13 @@
 【処理の流れ】
 1. エラー種別に応じた表示（READ ERR / WRITE ERR など）を行う。
 2. 警告音パターンを開始する。
-3. リトライ回数と経過時間を判定する。
-4. 終了条件を満たしたら STATE_WAIT へ戻す。
+3. retryCount と now - errorRetryStartMillis を使って再試行可否を判定する。
+4. 再試行可能な場合は retryCount を加算し、currentState = STATE_WAIT にして再実行機会を作る。
+5. retryCount が上限に達した場合は currentState = STATE_WAIT にして強制復帰する。
+6. STATE_WAIT 復帰時に errorFlag=false, errorCode=0, isReadInProgress=false, soundPattern=0 を初期化する。
 
 【エラー・異常ケース】
-- リトライ上限超過: 強制的に待機へ復帰する。
+- リトライ上限超過: 強制的に待機へ復帰し、エラー関連フラグを初期化する。
 ```
 
 ---
@@ -614,8 +633,8 @@
 
 【ロジック2: タイムアウト制御】
 【処理の流れ】
-1. 状態に入った時刻を記録する（例: stateEnterMillis）。
-2. now - stateEnterMillis を監視し、閾値（RFID未検出1.5秒等）を超えたらタイムアウト判定する。
+1. 読み取り開始時刻を記録する（readStartMillis）。
+2. isReadInProgress == true の間だけ now - readStartMillis を監視し、1500ms を超えたらタイムアウト判定する。
 3. タイムアウト時は STATE_TIMEOUT へ遷移し、表示・警告音後に STATE_WAIT へ戻す。
 
 【ロジック3: millisベースの周期実行】
@@ -639,8 +658,10 @@
 【ロジック6: エラー処理と安全復帰】
 【処理の流れ】
 1. errorCode に対応したメッセージ（READ ERR / WRITE ERR / SYSTEM ERR）を表示する。
-2. 警告音を鳴らし、再試行可否または強制復帰を判定する。
-3. いずれのエラーでも最終的に STATE_WAIT に戻してハングを防止する。
+2. STATE_ERROR に遷移する際は errorRetryStartMillis = now を記録し、待機時間判定の基準時刻をそろえる。
+3. retryCount < MAX_RETRY_COUNT かつ ERROR_RETRY_INTERVAL_MS 経過時のみ再試行し、再試行先は STATE_WAIT に統一する。
+4. retryCount が上限到達時は強制復帰として STATE_WAIT へ戻す。
+5. 復帰時は errorFlag, errorCode, isReadInProgress, soundPattern を初期化してハングと再発を防止する。
 
 【ロジック7: パスワード入力/認証ロジック】
 【処理の流れ】
@@ -680,7 +701,7 @@
 | No | テスト対象の関数 | 入力・操作 | 期待する結果 | 実際の結果 | 合否 |
 |:---|:---|:---|:---|:---|:---|
 | 1 | readICCard() | RFIDカードをかざす | true を返し、rfidData が更新される | | [ ] |
-| 2 | readICCard() | カードをかざさない（1.5秒） | false を返し、タイムアウト遷移条件を満たす | | [ ] |
+| 2 | readICCard() | カードをかざさない（1.5秒） | false を返し、待機継続する（タイムアウト遷移しない） | | [ ] |
 | 3 | readRemoteInput() | 定義済みリモコンキーを押す | irCommand に対応コードが格納される | | [ ] |
 | 4 | readRemoteInput() | 未定義リモコンキーを押す | 0 を返す、または状態変更しない | | [ ] |
 | 5 | inputPassword() | 正しい8桁を入力して確定する | passwordBuffer が期待値と一致する | | [ ] |
@@ -708,6 +729,50 @@
 | 4 | RFID未検出タイムアウト | カードをかざさず待機する | 1.5秒後に NO CARD 表示と警告音が出る | | [ ] |
 | 5 | パスワード入力タイムアウト | 途中入力後に10秒放置する | 入力がタイムアウト処理される | | [ ] |
 | 6 | ブザー最大鳴動時間制御 | 異常系を連続発生させる | 最大鳴動時間で必ず停止する | | [ ] |
+
+### 5-4. 異常系・境界値テスト（重点4項目）
+
+#### 5-4-1. 配列長・バッファオーバー（passwordBuffer / displayMessage）
+
+| No | テスト対象 | 入力・操作 | 期待する結果 | 実際の結果 | 合否 |
+|:---|:---|:---|:---|:---|:---|
+| 1 | inputPassword() | 0文字で確定 | 空文字（先頭が '\\0'）として扱われ、暴走しない | | [ ] |
+| 2 | inputPassword() | 8文字を入力して確定 | passwordBuffer[0..7] に格納され、passwordBuffer[8] は '\\0' | | [ ] |
+| 3 | inputPassword() | 9文字以上を連続入力 | 9文字目以降は切り捨て、バッファ外書き込みが発生しない | | [ ] |
+| 4 | displayToLCD() | 16文字ちょうどの文字列を表示 | 16文字が正常表示され、終端処理で破損しない | | [ ] |
+| 5 | displayToLCD() | 17文字以上（例: 64文字）を表示 | 16文字に切り詰め表示され、表示処理が継続する | | [ ] |
+| 6 | displayToLCD() | 空文字を表示 | LCD表示更新が正常完了し、異常動作しない | | [ ] |
+
+#### 5-4-2. タイムアウト・リトライ上限（異常系・境界値）
+
+| No | テスト対象 | 入力・操作 | 期待する結果 | 実際の結果 | 合否 |
+|:---|:---|:---|:---|:---|:---|
+| 1 | readICCard()/loop() | 読み取り開始後、1499ms時点を確認 | STATE_TIMEOUT に遷移しない | | [ ] |
+| 2 | readICCard()/loop() | 読み取り開始後、1500ms時点を確認 | STATE_TIMEOUT に遷移する | | [ ] |
+| 3 | readICCard()/loop() | 読み取り開始後、1501ms時点を確認 | STATE_TIMEOUT に遷移する | | [ ] |
+| 4 | handleError() | retryCount=MAX_RETRY_COUNT-1 でエラー発生 | 規定待機後に1回だけ再試行し STATE_WAIT に戻る | | [ ] |
+| 5 | handleError() | retryCount=MAX_RETRY_COUNT でエラー発生 | 再試行せず強制復帰で STATE_WAIT に戻る | | [ ] |
+| 6 | handleError() | retryCount が異常値（MAX+1相当） | 再試行せず強制復帰し、フラグ初期化が行われる | | [ ] |
+
+#### 5-4-3. グローバル変数初期化漏れ・型不一致
+
+| No | テスト対象 | 入力・操作 | 期待する結果 | 実際の結果 | 合否 |
+|:---|:---|:---|:---|:---|:---|
+| 1 | setup() | 電源投入直後の初期値確認 | currentState=STATE_WAIT、errorFlag=false、retryCount=0 など初期値一致 | | [ ] |
+| 2 | STATE_WAIT復帰処理 | エラー復帰直後の変数確認 | errorFlag=false, errorCode=0, isReadInProgress=false, soundPattern=0 | | [ ] |
+| 3 | millis系タイマー | 起動直後と遷移直後の値確認 | unsigned long で保持され、負値扱いにならない | | [ ] |
+| 4 | retryCount 型 | 境界値（0, MAX, 255）を注入して判定 | uint8_t 前提で比較が破綻せず、上限判定が正しく働く | | [ ] |
+| 5 | errorCode 型 | 正常値と異常値を注入 | int として扱われ、未定義値でも安全復帰できる | | [ ] |
+
+#### 5-4-4. エラーコード/フラグ異常値・異常遷移復帰
+
+| No | テスト対象 | 入力・操作 | 期待する結果 | 実際の結果 | 合否 |
+|:---|:---|:---|:---|:---|:---|
+| 1 | handleError(errorCode) | 未定義 errorCode（例: 255）を入力 | 汎用エラー扱いで表示し、最終的に STATE_WAIT へ復帰 | | [ ] |
+| 2 | loop() 状態分岐 | currentState に未定義値を注入 | default分岐で STATE_ERROR 経由、最終的に STATE_WAIT へ復帰 | | [ ] |
+| 3 | errorFlag | errorFlag=true のまま復帰処理を実行 | STATE_WAIT 復帰時に false へクリアされる | | [ ] |
+| 4 | soundPattern | 不正パターン値を設定して鳴動処理実行 | 安全側（停止/無音）で処理し、ハングしない | | [ ] |
+| 5 | 複合異常 | errorCode 未定義 + retryCount 上限超過を同時注入 | 再試行せず強制復帰し、関連フラグを初期化して待機復帰 | | [ ] |
 
 ---
 

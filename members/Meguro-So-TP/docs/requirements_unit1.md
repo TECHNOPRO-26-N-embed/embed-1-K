@@ -79,7 +79,7 @@ Passive Buzzer
 ### 4-2. 自分が追加で使う予定の部品（ELEGOOキットより）
 
 | 部品名 | 何のために使うか（機能との対応） |
-| RIFID-RC522 | ICチップの読み取り |
+| RIFID-RC522 | ICチップの読み取り、書き込み |
 | LCD1602 Module | 文字の表示 |
 | Remote　Control | 赤外線信号の送信 |
 | IR Receiver Module | 赤外線信号の受信 |
