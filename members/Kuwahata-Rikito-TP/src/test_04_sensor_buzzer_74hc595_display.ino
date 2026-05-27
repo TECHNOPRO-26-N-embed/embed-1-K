@@ -13,6 +13,7 @@
 // - 74HC595: D8, D9, D10
 // - 4桁選択: D2, D3, D4, D5
 // - ブザー: D6
+// - LED: D7
 // - HC-SR04: D11(Trig), D12(Echo)
 // =====================================================
 
@@ -36,6 +37,7 @@ const uint8_t DIGIT_PINS[4] = {PIN_DIGIT_1, PIN_DIGIT_2, PIN_DIGIT_3, PIN_DIGIT_
 // ブザー + HC-SR04（表示系と競合しないピン）
 // -----------------------------------------------------
 const uint8_t PIN_BUZZER = 6;
+const uint8_t PIN_LED = 7;
 const uint8_t PIN_TRIG = 11;
 const uint8_t PIN_ECHO = 12;
 
@@ -78,6 +80,12 @@ const unsigned long FAR_BEEP_ON_MS = 100;
 const unsigned long FAR_BEEP_OFF_MS = 900;
 const unsigned long ECHO_TIMEOUT_US = 12000UL;
 
+// LED点滅周期(ms)
+// 近距離ほど速く点滅し、危険度を視覚的に伝える
+const unsigned long LED_BLINK_NEAR_MS = 80;
+const unsigned long LED_BLINK_MID_MS = 250;
+const unsigned long LED_BLINK_FAR_MS = 700;
+
 // 1桁あたりの点灯時間(us)。短くすると暗くなる
 const unsigned int DIGIT_ON_TIME_US = 500;
 
@@ -91,6 +99,7 @@ const bool DIGIT_ACTIVE_LOW = true;
 // -----------------------------------------------------
 int distanceMm = 0;
 bool buzzerOn = false;
+bool ledOn = false;
 uint8_t displayDigits[4] = {0, 0, 0, 0};
 uint8_t currentScanDigit = 0;
 
@@ -98,10 +107,12 @@ unsigned long lastMeasureMillis = 0;
 unsigned long lastDisplayScanMillis = 0;
 unsigned long lastDisplayValueUpdateMillis = 0;
 unsigned long lastBeepToggleMillis = 0;
+unsigned long lastLedToggleMillis = 0;
 
 int readDistanceMm();
 uint8_t classifyZone(int measuredMm);
 void outputBuzzerByZone(uint8_t zone);
+void outputLedByZone(uint8_t zone);
 void convertNumberToDigits(int valueMm);
 void updateDisplayScan();
 void writeShiftRegister(uint8_t seg);
@@ -128,6 +139,10 @@ void setup() {
   pinMode(PIN_BUZZER, OUTPUT);
   noTone(PIN_BUZZER);
 
+  // --- LED初期化 ---
+  pinMode(PIN_LED, OUTPUT);
+  digitalWrite(PIN_LED, LOW);
+
   // 起動確認:
   // 1) 全桁を有効化
   // 2) 7セグ全点灯パターンを出力
@@ -147,6 +162,7 @@ void setup() {
   lastDisplayScanMillis = millis();
   lastDisplayValueUpdateMillis = millis();
   lastBeepToggleMillis = millis();
+  lastLedToggleMillis = millis();
 
   // 起動直後の表示値を初期化
   convertNumberToDigits(distanceMm);
@@ -176,6 +192,7 @@ void loop() {
   // 距離ゾーンに応じてブザー出力を更新
   uint8_t zone = classifyZone(distanceMm);
   outputBuzzerByZone(zone);
+  outputLedByZone(zone);
 
   // ダイナミック点灯: 周期的に次の桁へ進める
   if (now - lastDisplayScanMillis >= DISPLAY_SCAN_INTERVAL_MS) {
@@ -258,6 +275,24 @@ void outputBuzzerByZone(uint8_t zone) {
     } else {
       noTone(PIN_BUZZER);
     }
+  }
+}
+
+void outputLedByZone(uint8_t zone) {
+  unsigned long now = millis();
+  unsigned long interval = LED_BLINK_FAR_MS;
+
+  if (zone == 0) {
+    interval = LED_BLINK_NEAR_MS;
+  } else if (zone == 1) {
+    interval = LED_BLINK_MID_MS;
+  }
+
+  // ノンブロッキングで点滅更新
+  if (now - lastLedToggleMillis >= interval) {
+    lastLedToggleMillis = now;
+    ledOn = !ledOn;
+    digitalWrite(PIN_LED, ledOn ? HIGH : LOW);
   }
 }
 
