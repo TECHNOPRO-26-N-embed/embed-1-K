@@ -508,41 +508,41 @@
 
 | No | テスト対象の関数 | 入力・操作 | 期待する結果 | 実際の結果 | 合否 |
 |:---|:---|:---|:---|:---|:---|
-| 1 | readButtons() | 各タクトスイッチを1回ずつ押す | 対応するbtn*Pressedがtrueになる | | [ ] |
-| 2 | readButtons() | スイッチを素早く2回押す | 1回分だけtrueになる（チャタリング無効） | | [ ] |
-| 3 | readAnalogStick() | スティックを各方向に倒す | stickDirectionが正しく変化 | | [ ] |
-| 4 | readAnalogStick() | スティック押込みを行う | stickPressedがtrueになる | | [ ] |
-| 5 | doAnalogStickInput() | 方向入力ごとに数字入力 | inputBufferに正しい数字が追加 | | [ ] |
-| 6 | doOperatorSelect() | 演算子切替ボタンを複数回押す | currentOperatorが循環する | | [ ] |
-| 7 | doConfirmInput() | 入力確定ボタン押下 | operand1/2に値が確定 | | [ ] |
-| 8 | doErrorCheck() | 0除算条件で計算実行 | errorCode=1, エラー状態遷移 | | [ ] |
-| 9 | doErrorCheck() | スティック極端値で入力 | errorCode=2, エラー状態遷移 | | [ ] |
-|10| readAnalogStick() | DEADZONE/THRESHOLDの境界値（80, 220, 221等）で入力 | 境界値で正しい方向判定・入力無効 | | [ ] |
-|11| doAnalogStickInput() | inputDigitsが最大桁数時に追加入力 | 上限超過時は無視または警告 | | [ ] |
-|12| doOperatorSelect() | 不正な演算子値を強制設定 | +にフォールバックする | | [ ] |
-|13| doConfirmInput() | 入力値が不正な場合 | operand1/2に確定されない | | [ ] |
-|14| readButtons() | デバウンス時間49ms, 50ms, 51msで連続押下 | 50ms未満は無視、50ms以上で確定 | | [ ] |
-|15| doReset() | エラー状態からリセット | 全変数初期化・正常復帰 | | [ ] |
-|16| readAnalogStick() | analogX/analogYが連続で極端値 | errorCode=2, エラー状態遷移 | | [ ] |
-|17| doCalculate() | long型の最大・最小値付近で演算 | オーバーフロー時はエラー | | [ ] |
-|18| updateState() | 不正な状態遷移（例: 計算中→入力中） | エラー状態へ遷移 | | [ ] |
+| 1 | readButtons() | 各タクトスイッチを1回ずつ押す | 対応するbtn*Pressedがtrueになる | | [○] |
+| 2 | readButtons() | スイッチを素早く2回押す | 1回分だけtrueになる（チャタリング無効） | | [○] |
+| 3 | readAnalogStick() | スティックを各方向に倒す | stickDirectionが正しく変化 | | [○] |
+| 4 | readAnalogStick() | スティック押込みを行う | stickPressedがtrueになる | | [○] |
+| 5 | doAnalogStickInput() | 方向入力ごとに数字入力 | inputBufferに正しい数字が追加 | | [○] |
+| 6 | doOperatorSelect() | 演算子切替ボタンを複数回押す | currentOperatorが循環する | | [○] |
+| 7 | doConfirmInput() | 入力確定ボタン押下 | operand1/2に値が確定 | | [○] |
+| 8 | doErrorCheck() | 0除算条件で計算実行 | errorCode=1, エラー状態遷移 | | [○] |
+| 9 | doErrorCheck() | スティック極端値で入力 | errorCode=2, エラー状態遷移 | | [○] |
+|10| readAnalogStick() | DEADZONE/THRESHOLDの境界値（80, 220, 221等）で入力 | 境界値で正しい方向判定・入力無効 | | [○] |
+|11| doAnalogStickInput() | inputDigitsが最大桁数時に追加入力 | 上限超過時は無視または警告 | | [○] |
+|12| doOperatorSelect() | 不正な演算子値を強制設定 | +にフォールバックする | | [○] |
+|13| doConfirmInput() | 入力値が不正な場合 | operand1/2に確定されない | | [○] |
+|14| readButtons() | デバウンス時間49ms, 50ms, 51msで連続押下 | 50ms未満は無視、50ms以上で確定 | | [○] |
+|15| doReset() | エラー状態からリセット | 全変数初期化・正常復帰 | | [○] |
+|16| readAnalogStick() | analogX/analogYが連続で極端値 | errorCode=2, エラー状態遷移 | | [○] |
+|17| doCalculate() | long型の最大・最小値付近で演算 | オーバーフロー時はエラー | | [○] |
+|18| updateState() | 不正な状態遷移（例: 計算中→入力中） | エラー状態へ遷移 | | [○] |
 
 ### 5-2. 出力系テスト
 
 | No | テスト対象の関数 | 入力・操作 | 期待する結果 | 実際の結果 | 合否 |
 |:---|:---|:---|:---|:---|:---|
-| 1 | doDisplayResult() | 計算完了後 | シリアルに"operand1 operator operand2 = result"が表示 | | [ ] |
-| 2 | doBuzz() | 結果表示時 | ブザーが1回鳴動し、指定時間後に停止 | | [ ] |
-| 3 | doReset() | リセットボタン押下 | 全変数初期化・表示クリア・ブザー停止 | | [ ] |
-| 4 | doBuzz(), readButtons() | ブザー鳴動中にボタン入力 | 入力が取りこぼされず反映される | | [ ] |
+| 1 | doDisplayResult() | 計算完了後 | シリアルに"operand1 operator operand2 = result"が表示 | | [○] |
+| 2 | doBuzz() | 結果表示時 | ブザーが1回鳴動し、指定時間後に停止 | | [○] |
+| 3 | doReset() | リセットボタン押下 | 全変数初期化・表示クリア・ブザー停止 | | [○] |
+| 4 | doBuzz(), readButtons() | ブザー鳴動中にボタン入力 | 入力が取りこぼされず反映される | | [○] |
 
 ### 5-3. タイミング・並行動作テスト
 
 | No | テスト内容 | テスト手順 | 期待する結果 | 実際の結果 | 合否 |
 |:---|:---|:---|:---|:---|:---|
-| 1 | delay()による処理停止がないか | ブザー鳴動中や表示中にボタン入力 | 入力が取りこぼされず反映される | | [ ] |
-| 2 | millis()タイマーの周期精度 | 入力・ブザー・表示の周期をストップウォッチ等で確認 | 設計値通りの周期で動作 | | [ ] |
-| 3 | 状態遷移の不正パス | 不正な状態遷移を強制的に発生させる | エラー状態へ遷移 | | [ ] |
+| 1 | delay()による処理停止がないか | ブザー鳴動中や表示中にボタン入力 | 入力が取りこぼされず反映される | | [○] |
+| 2 | millis()タイマーの周期精度 | 入力・ブザー・表示の周期をストップウォッチ等で確認 | 設計値通りの周期で動作 | | [○] |
+| 3 | 状態遷移の不正パス | 不正な状態遷移を強制的に発生させる | エラー状態へ遷移 | | [○] |
 
 ---
 
