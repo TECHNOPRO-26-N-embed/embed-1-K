@@ -1,5 +1,5 @@
 #define IR_USE_AVR_TIMER1
-#include <Arduino.h>
+/#include <Arduino.h>
 #include <LiquidCrystal.h>
 #include <IRremote.hpp>
 
@@ -29,7 +29,6 @@ const bool REMOTE_DEBUG_PRINT = true;
 <<<<<<< HEAD
 =======
 <<<<<<< HEAD
-// ★수정됨: 소등 시 켜진다면 사용 중인 LED가 공통 캐소드 방식이므로 false로 변경
 =======
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
 >>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
@@ -79,7 +78,6 @@ bool isAlarmInputPhase = false;
 <<<<<<< HEAD
 =======
 <<<<<<< HEAD
-// ★수정됨: 동적 퀴즈용 변수
 =======
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
 >>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
@@ -161,7 +159,7 @@ void setup() {
   randomSeed(analogRead(A0));
 =======
 <<<<<<< HEAD
-  randomSeed(analogRead(A0)); // 난수 시드 초기화
+  randomSeed(analogRead(A0));
 =======
   randomSeed(analogRead(A0));
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
@@ -457,7 +455,6 @@ bool checkAlarmTrigger() {
 <<<<<<< HEAD
 =======
 <<<<<<< HEAD
-// ★수정됨: 동적 난수 생성
 =======
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
 >>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
@@ -473,7 +470,6 @@ void generateNewQuiz() {
 <<<<<<< HEAD
 =======
 <<<<<<< HEAD
-    // 음수가 나오지 않도록 스왑 처리
 =======
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
 >>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
@@ -496,7 +492,7 @@ void startAlarmSequence() {
   generateNewQuiz();
 =======
 <<<<<<< HEAD
-  generateNewQuiz(); // 퀴즈 생성
+  generateNewQuiz();
 =======
   generateNewQuiz();
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
@@ -516,7 +512,6 @@ void startAlarmSequence() {
 <<<<<<< HEAD
 =======
 <<<<<<< HEAD
-// ★수정됨: 정답 즉각 확인 로직으로 개편
 =======
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
 >>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
@@ -545,7 +540,6 @@ void runQuizStep() {
 <<<<<<< HEAD
 =======
 <<<<<<< HEAD
-    // 입력된 값이 정답과 일치하는지 실시간 확인
 =======
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
 >>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
@@ -558,7 +552,6 @@ void runQuizStep() {
 <<<<<<< HEAD
 =======
 <<<<<<< HEAD
-    // 입력이 길어졌으나 정답이 아닌 경우 자동 초기화 (정답 최대 2자리 9x9=81)
 =======
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
 >>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
