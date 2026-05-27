@@ -56,8 +56,7 @@ const unsigned long DEBOUNCE_DELAY_MS = 50;
 const unsigned long CLOCK_STEP_MS = 60000;
 const unsigned long LCD_UPDATE_MS = 150;
 const unsigned long IDLE_BLINK_MS = 500;
-const unsigned long BEEP_TOGGLE_MS = 200;
-const unsigned long TONE_PATTERN_SWITCH_MS = 3000;
+const unsigned long TONE_PATTERN_SWITCH_MS = 10000;
 const unsigned long LED_PATTERN_SWITCH_MS = 1000;
 const unsigned long QUIZ_INPUT_TIMEOUT_MS = 5000;
 
@@ -554,30 +553,60 @@ void mixAlarmTonePatterns(unsigned long nowMs) {
     return;
   }
 
+  // パターンA: マリオ風8bitメロディ（著作権配慮で完全一致は避けたアレンジ）
+  static const uint16_t melodyAHz[] = {
+    659, 659, 659, 523, 659, 784, 392,
+    523, 392, 330, 440, 494, 466, 440,
+    392, 659, 784, 880, 698, 784, 659,
+    523, 587, 494
+  };
+  static const uint16_t melodyADur[] = {
+    180, 180, 220, 180, 220, 300, 300,
+    260, 240, 260, 220, 220, 180, 220,
+    180, 180, 220, 260, 220, 220, 220,
+    220, 220, 320
+  };
+
+  // パターンB: サイレン（高低を往復）
+  static const uint16_t melodyBHz[] = {
+    880, 988, 1109, 1319, 1109, 988, 880, 740,
+    988, 1175, 1397, 1175, 988, 784, 988, 1319
+  };
+  static const uint16_t melodyBDur[] = {
+    160, 160, 160, 180, 160, 160, 160, 180,
+    160, 160, 180, 160, 160, 180, 160, 220
+  };
+
+  const uint16_t *activeMelodyHz = (toneMode == 0) ? melodyAHz : melodyBHz;
+  const uint16_t *activeMelodyDur = (toneMode == 0) ? melodyADur : melodyBDur;
+  const byte activeLen = (toneMode == 0)
+                           ? (byte)(sizeof(melodyAHz) / sizeof(melodyAHz[0]))
+                           : (byte)(sizeof(melodyBHz) / sizeof(melodyBHz[0]));
+
+  static byte noteIndex = 0;
+
   if ((nowMs - lastPatternMs) >= TONE_PATTERN_SWITCH_MS) {
     lastPatternMs = nowMs;
     toneMode = (toneMode + 1) % 2;
+    noteIndex = 0;
+    noTone(PIN_BUZZER);
+    lastBeepMillis = nowMs;
+    return;
   }
 
-  if ((nowMs - lastBeepMillis) >= BEEP_TOGGLE_MS) {
+  if ((nowMs - lastBeepMillis) >= activeMelodyDur[noteIndex]) {
     lastBeepMillis = nowMs;
-    static bool toneOn = false;
-    static byte idx = 0;
-    toneOn = !toneOn;
-    
-    if (!toneOn) {
-      noTone(PIN_BUZZER);
-      return;
-    }
 
-    if (toneMode == 0) {
-      const int seq0[] = {880, 988, 1047, 1175};
-      tone(PIN_BUZZER, seq0[idx % 4]);
-      idx++;
-    } else {
-      const int seq1[] = {1319, 988, 740, 988};
-      tone(PIN_BUZZER, seq1[idx % 4]);
-      idx++;
+    // 休符を短くして体感音量を上げる
+    uint16_t playMs = activeMelodyDur[noteIndex];
+    if (playMs > 10) {
+      playMs -= 10;
+    }
+    tone(PIN_BUZZER, activeMelodyHz[noteIndex], playMs);
+
+    noteIndex++;
+    if (noteIndex >= activeLen) {
+      noteIndex = 0;
     }
   }
 }
