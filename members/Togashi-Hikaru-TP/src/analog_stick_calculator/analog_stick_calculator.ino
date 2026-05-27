@@ -217,11 +217,11 @@ void loop() {
       } else if (hasOperand2) {
         operand2 = 0;
         hasOperand2 = false;
-        Serial.println(F("cancel: operand2 cleared"));
+        Serial.println(F("取消: 第2オペランドをクリア"));
       } else if (hasOperand1) {
         operand1 = 0;
         hasOperand1 = false;
-        Serial.println(F("cancel: operand1 cleared"));
+        Serial.println(F("取消: 第1オペランドをクリア"));
       }
     }
   }
@@ -235,7 +235,7 @@ void loop() {
       if (prevState != STATE_IDLE) {
         noTone(PIN_BUZZER);
         buzzerActive = false;
-        Serial.println(F("state: IDLE"));
+        Serial.println(F("状態: 待機(IDLE)"));
         // 入場処理を消費したら、次ループで再実行しないよう同期する。
         prevState = STATE_IDLE;
       }
@@ -245,7 +245,7 @@ void loop() {
       if (prevState != STATE_INPUT) {
         // 結果表示のフラグをクリアして新規入力へ
         hasResult = false;
-        Serial.println(F("state: INPUT"));
+        Serial.println(F("状態: 入力(INPUT)"));
         // 入場処理を消費したら、次ループで再実行しないよう同期する。
         prevState = STATE_INPUT;
         //showInputStatus();
@@ -254,7 +254,7 @@ void loop() {
 
     case STATE_CALCULATING: {
       if (prevState != STATE_CALCULATING) {
-        Serial.println(F("state: CALCULATING"));
+        Serial.println(F("状態: 計算中(CALCULATING)"));
       }
 
       if (doErrorCheck(currentOperator, operand2, analogX, analogY)) {
@@ -549,7 +549,7 @@ void doAnalogStickInput(int8_t direction, uint8_t rangeMode) {
 
   if (inputDigits >= MAX_INPUT_DIGITS) {
     // 桁数上限に達したら追加しない
-    Serial.println(F("warn: max digits reached"));
+    Serial.println(F("警告: 最大桁数に達しました"));
     return;
   }
 
@@ -592,7 +592,7 @@ void doOperatorSelect(bool opButtonEvent) {
       break;
   }
 
-  Serial.print(F("operator: "));
+  Serial.print(F("演算子: "));
   Serial.println(currentOperator);
 }
 
@@ -605,7 +605,7 @@ void doAnalogStickPress(bool stickPressEvent) {
   // 押すたびにレンジを反転
   digitRangeMode = (digitRangeMode == 0) ? 1 : 0;
 
-  Serial.print(F("digit range: "));
+  Serial.print(F("入力レンジ: "));
   if (digitRangeMode == 0) {
     Serial.println(F("0-4"));
   } else {
@@ -620,7 +620,7 @@ void doConfirmInput(bool confirmButtonEvent, long bufferedValue) {
   }
   if (inputDigits == 0) {
     // 空確定は無効
-    Serial.println(F("warn: no digits to confirm"));
+    Serial.println(F("警告: 確定する数字がありません"));
     return;
   }
 
@@ -629,7 +629,7 @@ void doConfirmInput(bool confirmButtonEvent, long bufferedValue) {
     // まず operand1 を確定
     operand1 = bufferedValue;
     hasOperand1 = true;
-    Serial.print(F("operand1 fixed: "));
+    Serial.print(F("第1オペランド確定: "));
     Serial.println(operand1);
     clearInputBuffer();
     return;
@@ -638,7 +638,7 @@ void doConfirmInput(bool confirmButtonEvent, long bufferedValue) {
   // 次に operand2 を確定
   operand2 = bufferedValue;
   hasOperand2 = true;
-  Serial.print(F("operand2 fixed: "));
+  Serial.print(F("第2オペランド確定: "));
   Serial.println(operand2);
   clearInputBuffer();
 }
@@ -664,7 +664,7 @@ void doReset(bool resetButtonEvent) {
   clearAllRuntime();
   noTone(PIN_BUZZER);
   Serial.println();
-  Serial.println(F("state: RESET -> IDLE"));
+  Serial.println(F("状態: リセット(RESET) -> 待機(IDLE)"));
   changeState(STATE_IDLE);
 }
 
@@ -794,28 +794,28 @@ void showInputStatus() {
 
 // エラーコードに対応するメッセージをシリアルへ表示する。
 void showError() {
-  Serial.print(F("state: ERROR code="));
+  Serial.print(F("状態: エラー(ERROR) コード="));
   Serial.println(errorCode);
 
   // エラーコードごとに具体的な原因を表示
   switch (errorCode) {
     case ERROR_DIV_ZERO:
-      Serial.println(F("error: divide by zero"));
+      Serial.println(F("エラー: 0で割ることはできません"));
       break;
     case ERROR_STICK_FAULT:
-      Serial.println(F("error: stick abnormal value"));
+      Serial.println(F("エラー: スティック異常値"));
       break;
     case ERROR_OVERFLOW:
-      Serial.println(F("error: arithmetic overflow"));
+      Serial.println(F("エラー: 算術オーバーフロー"));
       break;
     case ERROR_INPUT_INCOMPLETE:
-      Serial.println(F("error: operands are incomplete"));
+      Serial.println(F("エラー: オペランドが不足しています"));
       break;
     case ERROR_INVALID_OPERATOR:
-      Serial.println(F("error: invalid operator"));
+      Serial.println(F("エラー: 無効な演算子"));
       break;
     default:
-      Serial.println(F("error: unknown"));
+      Serial.println(F("エラー: 不明"));
       break;
   }
 }
