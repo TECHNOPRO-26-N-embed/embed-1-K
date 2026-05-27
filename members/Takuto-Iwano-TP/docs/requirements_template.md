@@ -60,6 +60,7 @@
 
 | 部品名 | 何のために使うか（機能との対応） |
 |:---|:---|
+<<<<<<< HEAD
 | UNO R3 Controller Board 1PC | 基盤 |
 | USB Cable 1PC | USB接続 |
 | 830 Tie-Points Breadboard 1PC | ブレッドボード |
@@ -68,6 +69,25 @@
 | Resistor 220Ω 5PCS | LEDの電流制限 |
 | Passive Buzzer 1PC | 最大風量時の警告音 |
 | 9V1A Adapter 1PC | 電源供給 |
+=======
+|UNO R3 Contoller Board 1PC|基盤|
+|USEB Cable 1PC|USB|
+|830 Tie-Points Breadbord 1PC|ブレッドボード|
+|4 Digit 7-Segment Display 1PC|現在の回転数をユーザーに伝える|
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+|Rotary Encoder Module 1PC|回転数を検出し、伝える|
+=======
+>>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 9518da998d04755cdcb0666a04acb8b573d76891
+|Potentionmeter 10k 2PCS|モーターの速度を調節する|
+|Power Supply Module|モーターを動かすのに使用|
+|9V1A Adapter 1PC|モーターを動かすのに使用|
+|Fan Blade and 3-6V Motoe 1PC|速度をディスプレイに伝える|
+
+---
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
 
 ## 5. AIレビュー記録
 

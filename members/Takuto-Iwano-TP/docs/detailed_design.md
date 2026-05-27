@@ -22,6 +22,7 @@
 ## 1. グローバル変数・定数の設計
 
 ```
+<<<<<<< HEAD
 【ピン定義】
 PIN_POT        : const uint8_t = A1
 PIN_MOTOR_PWM  : const uint8_t = 3
@@ -33,12 +34,46 @@ PIN_LED_3      : const uint8_t = 8
 PIN_LED_4      : const uint8_t = 9
 PIN_LED_5      : const uint8_t = 10
 PIN_BUZZER     : const uint8_t = 12
+=======
+【ピン定義】（basic_design.md 3-1 から転記）
+<<<<<<< HEAD
+PIN_POT : const uint8_t = A1 // A1: ポテンショメータ入力
+=======
+<<<<<<< HEAD
+PIN_ENCODER : const uint8_t = 2 // D2: ロータリーエンコーダ入力
+PIN_POT : const uint8_t = A0 // A0: ポテンショメータ入力
+=======
+PIN_POT : const uint8_t = A1 // A1: ポテンショメータ入力
+>>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 9518da998d04755cdcb0666a04acb8b573d76891
+PIN_SEG_1 : const uint8_t = 3 // D3: 4桁7セグ表示制御ライン1
+PIN_SEG_2 : const uint8_t = 4 // D4: 4桁7セグ表示制御ライン2
+PIN_SEG_3 : const uint8_t = 5 // D5: 4桁7セグ表示制御ライン3
+PIN_SEG_4 : const uint8_t = 6 // D6: 4桁7セグ表示制御ライン4
+PIN_BUZZER : const uint8_t = 7 // D7: パッシブブザー出力
+PIN_MOTOR_PWM : const uint8_t = 9 // D9: モーターPWM出力
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
 
 LED_PINS       : const uint8_t[5] = {6, 7, 8, 9, 10}
 
+<<<<<<< HEAD
 【スケール定数】
 WIND_MIN       : const int = 0
 WIND_MAX       : const int = 2500
+=======
+【タイマー（millis()用）】（basic_design.md 2-3 から転記）
+lastPulseReadMillis : unsigned long = 0 // 回転パルス監視の前回時刻
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+lastPotReadMillis : unsigned long = 0 // ポテンショメータ読取の前回時刻
+=======
+>>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 9518da998d04755cdcb0666a04acb8b573d76891
+lastRpsCalcMillis : unsigned long = 0 // rps計算の前回時刻
+lastDisplayMillis : unsigned long = 0 // 表示更新の前回時刻
+lastBuzzerMillis : unsigned long = 0 // ブザー断続制御の前回時刻
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
 
 【入力・制御値】
 potValue       : uint16_t = 0          // 0〜1023
@@ -50,8 +85,23 @@ buzzerPatternActive : bool = false
 buzzerPhase         : uint8_t = 0
 buzzerPhaseStartMs  : unsigned long = 0
 ```
+<<<<<<< HEAD
 
 > 備考: 実装は状態変数（待機/計測/警告）を持たず、`windValue` から都度 `level` を算出して出力を更新する方式。
+=======
+【周期定数】
+INTERVAL_PULSE_READ : const unsigned long = 100 // 回転パルス監視の前回時刻（100ms周期）
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+INTERVAL_POT_READ : const unsigned long = 200 // ポテンショメータ読取の前回時刻（200ms周期）
+=======
+>>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 9518da998d04755cdcb0666a04acb8b573d76891
+INTERVAL_RPS_CALC : const unsigned long = 100 // rps計算の前回時刻（100ms周期）
+INTERVAL_DISPLAY : const unsigned long = 100 // 表示更新の前回時刻（100ms周期）
+INTERVAL_BUZZER : const unsigned long = 200 //ブザー断続制御の前回時刻（200ms周期）
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
 
 ---
 
