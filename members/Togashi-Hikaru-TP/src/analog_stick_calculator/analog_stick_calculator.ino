@@ -218,18 +218,24 @@ void loop() {
         operand2 = 0;
         hasOperand2 = false;
 <<<<<<< HEAD
+=======
+<<<<<<< HEAD
         Serial.println(F("cancel: operand2 cleared"));
       } else if (hasOperand1) {
         operand1 = 0;
         hasOperand1 = false;
         Serial.println(F("cancel: operand1 cleared"));
 =======
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
         Serial.println(F("取消: 第2オペランドをクリア"));
       } else if (hasOperand1) {
         operand1 = 0;
         hasOperand1 = false;
         Serial.println(F("取消: 第1オペランドをクリア"));
+<<<<<<< HEAD
+=======
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
       }
     }
   }
@@ -244,10 +250,14 @@ void loop() {
         noTone(PIN_BUZZER);
         buzzerActive = false;
 <<<<<<< HEAD
+        Serial.println(F("状態: 待機(IDLE)"));
+=======
+<<<<<<< HEAD
         Serial.println(F("state: IDLE"));
 =======
         Serial.println(F("状態: 待機(IDLE)"));
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
         // 入場処理を消費したら、次ループで再実行しないよう同期する。
         prevState = STATE_IDLE;
       }
@@ -258,10 +268,14 @@ void loop() {
         // 結果表示のフラグをクリアして新規入力へ
         hasResult = false;
 <<<<<<< HEAD
+        Serial.println(F("状態: 入力(INPUT)"));
+=======
+<<<<<<< HEAD
         Serial.println(F("state: INPUT"));
 =======
         Serial.println(F("状態: 入力(INPUT)"));
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
         // 入場処理を消費したら、次ループで再実行しないよう同期する。
         prevState = STATE_INPUT;
         //showInputStatus();
@@ -271,10 +285,14 @@ void loop() {
     case STATE_CALCULATING: {
       if (prevState != STATE_CALCULATING) {
 <<<<<<< HEAD
+        Serial.println(F("状態: 計算中(CALCULATING)"));
+=======
+<<<<<<< HEAD
         Serial.println(F("state: CALCULATING"));
 =======
         Serial.println(F("状態: 計算中(CALCULATING)"));
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
       }
 
       if (doErrorCheck(currentOperator, operand2, analogX, analogY)) {
@@ -570,10 +588,14 @@ void doAnalogStickInput(int8_t direction, uint8_t rangeMode) {
   if (inputDigits >= MAX_INPUT_DIGITS) {
     // 桁数上限に達したら追加しない
 <<<<<<< HEAD
+    Serial.println(F("警告: 最大桁数に達しました"));
+=======
+<<<<<<< HEAD
     Serial.println(F("warn: max digits reached"));
 =======
     Serial.println(F("警告: 最大桁数に達しました"));
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
     return;
   }
 
@@ -617,10 +639,14 @@ void doOperatorSelect(bool opButtonEvent) {
   }
 
 <<<<<<< HEAD
+  Serial.print(F("演算子: "));
+=======
+<<<<<<< HEAD
   Serial.print(F("operator: "));
 =======
   Serial.print(F("演算子: "));
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
   Serial.println(currentOperator);
 }
 
@@ -634,10 +660,14 @@ void doAnalogStickPress(bool stickPressEvent) {
   digitRangeMode = (digitRangeMode == 0) ? 1 : 0;
 
 <<<<<<< HEAD
+  Serial.print(F("入力レンジ: "));
+=======
+<<<<<<< HEAD
   Serial.print(F("digit range: "));
 =======
   Serial.print(F("入力レンジ: "));
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
   if (digitRangeMode == 0) {
     Serial.println(F("0-4"));
   } else {
@@ -653,10 +683,14 @@ void doConfirmInput(bool confirmButtonEvent, long bufferedValue) {
   if (inputDigits == 0) {
     // 空確定は無効
 <<<<<<< HEAD
+    Serial.println(F("警告: 確定する数字がありません"));
+=======
+<<<<<<< HEAD
     Serial.println(F("warn: no digits to confirm"));
 =======
     Serial.println(F("警告: 確定する数字がありません"));
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
     return;
   }
 
@@ -666,10 +700,14 @@ void doConfirmInput(bool confirmButtonEvent, long bufferedValue) {
     operand1 = bufferedValue;
     hasOperand1 = true;
 <<<<<<< HEAD
+    Serial.print(F("第1オペランド確定: "));
+=======
+<<<<<<< HEAD
     Serial.print(F("operand1 fixed: "));
 =======
     Serial.print(F("第1オペランド確定: "));
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
     Serial.println(operand1);
     clearInputBuffer();
     return;
@@ -679,10 +717,14 @@ void doConfirmInput(bool confirmButtonEvent, long bufferedValue) {
   operand2 = bufferedValue;
   hasOperand2 = true;
 <<<<<<< HEAD
+  Serial.print(F("第2オペランド確定: "));
+=======
+<<<<<<< HEAD
   Serial.print(F("operand2 fixed: "));
 =======
   Serial.print(F("第2オペランド確定: "));
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
   Serial.println(operand2);
   clearInputBuffer();
 }
@@ -709,10 +751,14 @@ void doReset(bool resetButtonEvent) {
   noTone(PIN_BUZZER);
   Serial.println();
 <<<<<<< HEAD
+  Serial.println(F("状態: リセット(RESET) -> 待機(IDLE)"));
+=======
+<<<<<<< HEAD
   Serial.println(F("state: RESET -> IDLE"));
 =======
   Serial.println(F("状態: リセット(RESET) -> 待機(IDLE)"));
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
   changeState(STATE_IDLE);
 }
 
@@ -843,15 +889,21 @@ void showInputStatus() {
 // エラーコードに対応するメッセージをシリアルへ表示する。
 void showError() {
 <<<<<<< HEAD
+  Serial.print(F("状態: エラー(ERROR) コード="));
+=======
+<<<<<<< HEAD
   Serial.print(F("state: ERROR code="));
 =======
   Serial.print(F("状態: エラー(ERROR) コード="));
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
   Serial.println(errorCode);
 
   // エラーコードごとに具体的な原因を表示
   switch (errorCode) {
     case ERROR_DIV_ZERO:
+<<<<<<< HEAD
+=======
 <<<<<<< HEAD
       Serial.println(F("error: divide by zero"));
       break;
@@ -870,6 +922,7 @@ void showError() {
     default:
       Serial.println(F("error: unknown"));
 =======
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
       Serial.println(F("エラー: 0で割ることはできません"));
       break;
     case ERROR_STICK_FAULT:
@@ -886,7 +939,10 @@ void showError() {
       break;
     default:
       Serial.println(F("エラー: 不明"));
+<<<<<<< HEAD
+=======
 >>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
+>>>>>>> 0da5c498f512e1082bed53b5d83363c49acbf2af
       break;
   }
 }
