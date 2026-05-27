@@ -26,7 +26,10 @@ LiquidCrystal lcd(LCD_PIN_RS, LCD_PIN_EN, LCD_PIN_D4, LCD_PIN_D5, LCD_PIN_D6, LC
 const bool ENABLE_REMOTE_INPUT = true;
 const bool REMOTE_DEBUG_PRINT = true;
 
+<<<<<<< HEAD
 // ★수정됨: 소등 시 켜진다면 사용 중인 LED가 공통 캐소드 방식이므로 false로 변경
+=======
+>>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
 const bool RGB_COMMON_ANODE = false;
 
 // アプリ全体の状態遷移
@@ -71,7 +74,10 @@ char inputDigits[5] = {'0', '0', '0', '0', '\0'};
 byte inputIndex = 0;
 bool isAlarmInputPhase = false;
 
+<<<<<<< HEAD
 // ★수정됨: 동적 퀴즈용 변수
+=======
+>>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
 char currentQuestion[16] = {'\0'};
 int currentAnswer = 0;
 
@@ -146,7 +152,11 @@ void setup() {
   pinMode(PIN_LED_B, OUTPUT);
 
   Serial.begin(9600);
+<<<<<<< HEAD
   randomSeed(analogRead(A0)); // 난수 시드 초기화
+=======
+  randomSeed(analogRead(A0));
+>>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
 
   if (ENABLE_REMOTE_INPUT) {
     IrReceiver.begin(PIN_IR, DISABLE_LED_FEEDBACK);
@@ -435,7 +445,10 @@ bool checkAlarmTrigger() {
   return true;
 }
 
+<<<<<<< HEAD
 // ★수정됨: 동적 난수 생성
+=======
+>>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
 void generateNewQuiz() {
   int a = random(1, 10);
   int b = random(1, 10);
@@ -445,7 +458,10 @@ void generateNewQuiz() {
     currentAnswer = a + b;
     snprintf(currentQuestion, 16, "%d+%d=?", a, b);
   } else if (op == 1) {
+<<<<<<< HEAD
     // 음수가 나오지 않도록 스왑 처리
+=======
+>>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
     if (b > a) { 
       int temp = a; a = b; b = temp; 
     }
@@ -461,7 +477,11 @@ void startAlarmSequence() {
   isAlarmRinging = true;
   resetQuizInput();
   
+<<<<<<< HEAD
   generateNewQuiz(); // 퀴즈 생성
+=======
+  generateNewQuiz();
+>>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
 
   setAlarmToneMode(0);
   setLedColorMode(0);
@@ -474,7 +494,10 @@ void startAlarmSequence() {
   lastQuizInputMs = nowMs;
 }
 
+<<<<<<< HEAD
 // ★수정됨: 정답 즉각 확인 로직으로 개편
+=======
+>>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
 void runQuizStep() {
   if (irCode == 0) {
     if (quizInputIndex > 0 && (millis() - lastQuizInputMs) >= QUIZ_INPUT_TIMEOUT_MS) {
@@ -497,14 +520,20 @@ void runQuizStep() {
       quizInput[quizInputIndex] = '\0';
     }
     
+<<<<<<< HEAD
     // 입력된 값이 정답과 일치하는지 실시간 확인
+=======
+>>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
     if (atoi(quizInput) == currentAnswer) {
       noTone(PIN_BUZZER);
       tone(PIN_BUZZER, 1600, 120);
       isAlarmRinging = false;
       currentState = STATE_IDLE;
     } 
+<<<<<<< HEAD
     // 입력이 길어졌으나 정답이 아닌 경우 자동 초기화 (정답 최대 2자리 9x9=81)
+=======
+>>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
     else if (quizInputIndex >= 3) {
       resetQuizInput();
     }
