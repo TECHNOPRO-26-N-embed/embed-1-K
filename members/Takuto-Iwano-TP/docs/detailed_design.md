@@ -33,8 +33,12 @@
 
 ```
 【ピン定義】（basic_design.md 3-1 から転記）
+<<<<<<< HEAD
 PIN_ENCODER : const uint8_t = 2 // D2: ロータリーエンコーダ入力
 PIN_POT : const uint8_t = A0 // A0: ポテンショメータ入力
+=======
+PIN_POT : const uint8_t = A1 // A1: ポテンショメータ入力
+>>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
 PIN_SEG_1 : const uint8_t = 3 // D3: 4桁7セグ表示制御ライン1
 PIN_SEG_2 : const uint8_t = 4 // D4: 4桁7セグ表示制御ライン2
 PIN_SEG_3 : const uint8_t = 5 // D5: 4桁7セグ表示制御ライン3
@@ -47,7 +51,10 @@ PIN_MOTOR_PWM : const uint8_t = 9 // D9: モーターPWM出力
 
 【タイマー（millis()用）】（basic_design.md 2-3 から転記）
 lastPulseReadMillis : unsigned long = 0 // 回転パルス監視の前回時刻
+<<<<<<< HEAD
 lastPotReadMillis : unsigned long = 0 // ポテンショメータ読取の前回時刻
+=======
+>>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
 lastRpsCalcMillis : unsigned long = 0 // rps計算の前回時刻
 lastDisplayMillis : unsigned long = 0 // 表示更新の前回時刻
 lastBuzzerMillis : unsigned long = 0 // ブザー断続制御の前回時刻
@@ -64,7 +71,10 @@ displayValue : uint16_t = 0 // ディスプレイ表示値
 ```
 【周期定数】
 INTERVAL_PULSE_READ : const unsigned long = 100 // 回転パルス監視の前回時刻（100ms周期）
+<<<<<<< HEAD
 INTERVAL_POT_READ : const unsigned long = 200 // ポテンショメータ読取の前回時刻（200ms周期）
+=======
+>>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
 INTERVAL_RPS_CALC : const unsigned long = 100 // rps計算の前回時刻（100ms周期）
 INTERVAL_DISPLAY : const unsigned long = 100 // 表示更新の前回時刻（100ms周期）
 INTERVAL_BUZZER : const unsigned long = 200 //ブザー断続制御の前回時刻（200ms周期）

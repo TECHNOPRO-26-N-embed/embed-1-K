@@ -81,7 +81,10 @@
 |USEB Cable 1PC|USB|
 |830 Tie-Points Breadbord 1PC|ブレッドボード|
 |4 Digit 7-Segment Display 1PC|現在の回転数をユーザーに伝える|
+<<<<<<< HEAD
 |Rotary Encoder Module 1PC|回転数を検出し、伝える|
+=======
+>>>>>>> 0fa8001fd10e1a738073c67920f0e0e3435714f3
 |Potentionmeter 10k 2PCS|モーターの速度を調節する|
 |Power Supply Module|モーターを動かすのに使用|
 |9V1A Adapter 1PC|モーターを動かすのに使用|
